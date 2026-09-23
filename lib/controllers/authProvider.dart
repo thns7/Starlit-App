@@ -1,321 +1,193 @@
-import 'dart:convert';
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:starlitfilms/services/auth_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:starlitfilms/models/profile.dart';
+import 'package:starlitfilms/services/supabase_service.dart';
+
+/// Resultado do cadastro: se o projeto exige confirmação de email,
+/// o usuário ainda não está logado ao final do signUp.
+enum RegisterResult { loggedIn, needsEmailConfirmation }
 
 class AuthProvider with ChangeNotifier {
-  // === Variáveis privadas ===
-  String? _token;
-  String? _nome;
-  String? _username;
-  String? _email;
-  String? _avatar;
-  String? _descricao;
-  List<dynamic> _amigos = [];
-  List<dynamic> _reviews = [];
-  List<dynamic> _filmes = [];
-  List<dynamic> _comentarios = []; // Lista para armazenar comentários
-  final AuthService _authService = AuthService();
+  final SupabaseService _service = SupabaseService.instance;
+  StreamSubscription<AuthState>? _authSub;
 
-  // Getters
-  bool get isAuthenticated => _token != null;
-  String? get avatar => _avatar;
-  String? get nome => _nome;
-  String? get username => _username;
-  String? get descricao => _descricao;
-  List<dynamic> get amigos => _amigos;
-  List<dynamic> get reviews => _reviews;
-  List<dynamic> get filmes => _filmes;
-  List<dynamic> get comentarios => _comentarios; // Getter para comentários
-  String get authToken => _token ?? '';
-  String? get email => _email;
+  Profile? _profile;
 
-  // === Construtor ===
   AuthProvider() {
-    _loadUserData;();
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedOut) {
+        _profile = null;
+        notifyListeners();
+      } else if (data.session != null && _profile == null) {
+        loadProfile();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
+
+  // === Getters usados pelas telas ===
+  User? get user => Supabase.instance.client.auth.currentUser;
+  bool get isAuthenticated => user != null;
+  Profile? get profile => _profile;
+  String? get userId => user?.id;
+  String? get email => user?.email;
+  String? get nome => _profile?.name;
+  String? get username => _profile?.username;
+  String? get descricao => _profile?.bio;
+  String? get avatar => _profile?.avatarUrl;
+
+  Future<void> loadProfile() async {
+    final id = userId;
+    if (id == null) return;
+    try {
+      _profile = await _service.fetchProfile(id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Erro ao carregar perfil: $e');
+    }
   }
 
   // === Autenticação ===
-  Future<bool> login(String email, String password) async {
+  Future<void> login(String email, String password) async {
     try {
-      final responseData = await _authService.login(email, password);
-      final responseDecoded = jsonDecode(responseData);
-      await setAuthToken(responseDecoded['token'].toString());
-      return true;
-    } catch (error) {
-      debugPrint('Erro ao fazer login: $error');
-      rethrow;
+      await Supabase.instance.client.auth
+          .signInWithPassword(email: email.trim(), password: password);
+    } on AuthException catch (e) {
+      throw friendlyAuthError(e);
     }
+    await loadProfile();
   }
 
-  // === Comentários ===
-  Future<void> fetchComments(String reviewId) async {
-    if (_token == null) {
-      throw Exception('Usuário não está autenticado!');
+  Future<RegisterResult> register({
+    required String nome,
+    required String username,
+    required String email,
+    required String password,
+    Uint8List? avatarBytes,
+    String? avatarExtension,
+  }) async {
+    final normalized = username.trim().toLowerCase();
+    if (!await _service.isUsernameAvailable(normalized)) {
+      throw 'Esse username já está em uso.';
     }
 
+    final AuthResponse response;
     try {
-      // Aqui você deve implementar a lógica para buscar os comentários da API
-      _comentarios = await _authService.fetchComments(reviewId, _token!);
-      notifyListeners();
-    } catch (error) {
-      debugPrint('Erro ao buscar comentários: $error');
-      rethrow;
+      response = await Supabase.instance.client.auth.signUp(
+        email: email.trim(),
+        password: password,
+        data: {'username': normalized, 'name': nome.trim()},
+      );
+    } on AuthException catch (e) {
+      throw friendlyAuthError(e);
     }
+
+    if (response.session == null) {
+      return RegisterResult.needsEmailConfirmation;
+    }
+
+    if (avatarBytes != null) {
+      try {
+        final url =
+            await _service.uploadAvatar(avatarBytes, avatarExtension ?? 'jpg');
+        await _service.updateProfile(
+          name: nome.trim(),
+          username: normalized,
+          bio: '',
+          avatarUrl: url,
+        );
+      } catch (e) {
+        debugPrint('Erro ao enviar avatar: $e');
+      }
+    }
+    await loadProfile();
+    return RegisterResult.loggedIn;
   }
 
-  Future<void> addComment(String reviewId, String commentText) async {
-    if (_token == null) {
-      throw Exception('Usuário não está autenticado!');
-    }
-
+  Future<void> resetPassword(String email) async {
     try {
-      await _authService.commentReview(reviewId, commentText, _token!);
-      await fetchComments(reviewId); // Atualiza a lista de comentários após adicionar
-    } catch (error) {
-      debugPrint('Erro ao adicionar comentário: $error');
-      rethrow;
-    }
-  }
-  List<dynamic> _todasReviews = [];
-
-List<dynamic> get todasReviews => _todasReviews;
-
-Future<void> fetchAllReviews() async {
-  try {
-    _todasReviews = await _authService.fetchAllReviews(); // Atribua diretamente
-    debugPrint('Reviews recebidas: $_todasReviews'); // Imprime a lista de reviews
-    notifyListeners();
-  } catch (error) {
-    debugPrint('Erro ao buscar todas as reviews: $error');
-    rethrow;
-  }
-}
-
-  
-
-
-
-  Future<void> register(String nome, String username, String email,
-      String password, String avatar) async {
-    try {
-      await _authService.register(nome, username, email, password, avatar);
-      _nome = nome;
-      _username = username;
-      _avatar = avatar;
-
-      await saveProfileChanges();
-      notifyListeners();
-    } catch (error) {
-      debugPrint('Erro ao registrar: $error');
-      rethrow;
+      await Supabase.instance.client.auth.resetPasswordForEmail(email.trim());
+    } on AuthException catch (e) {
+      throw friendlyAuthError(e);
     }
   }
 
   Future<void> logout() async {
-    _token = null;
-    _nome = null;
-    _username = null;
-    _email = null;
-    _avatar = null;
-    _descricao = null;
-    _filmes = []; // Limpa a lista de filmes no logout
-    notifyListeners();
-
-    final prefs = await SharedPreferences.getInstance();
-    prefs.clear();
-  }
-
-
-
-  void updateAvatar(String newAvatarUrl) {
-    _avatar = newAvatarUrl;
-    notifyListeners();
-    _updateUserDetails();
-  }
-
-  void updateNome(String newNome) {
-    _nome = newNome;
-    notifyListeners();
-    _updateUserDetails();
-  }
-
-  void updateUsername(String newUsername) {
-    _username = newUsername;
-    notifyListeners();
-    _updateUserDetails();
-  }
-
-  void updateDescricao(String newDescricao) {
-    _descricao = newDescricao;
-    notifyListeners();
-    _updateUserDetails();
-  }
-
-  Future<void> saveProfileChanges() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('nome', _nome ?? '');
-    await prefs.setString('username', _username ?? '');
-    await prefs.setString('avatar', _avatar ?? '');
-    await prefs.setString('descricao', _descricao ?? '');
+    await Supabase.instance.client.auth.signOut();
+    _profile = null;
     notifyListeners();
   }
 
-  Future<void> _updateUserDetails() async {
-    if (_email != null) {
-      try {
-        await _authService.updateUserDetails(
-          _email!,
-          _nome ?? '',
-          _username ?? '',
-          _avatar ?? '',
-          _descricao ?? ''
-        );
-        await saveProfileChanges();
-      } catch (error) {
-        debugPrint('Erro ao atualizar detalhes do usuário: $error');
-      }
+  // === Perfil ===
+  Future<void> updateProfile({
+    required String nome,
+    required String username,
+    required String descricao,
+    Uint8List? avatarBytes,
+    String? avatarExtension,
+  }) async {
+    final normalized = username.trim().toLowerCase();
+    if (normalized != _profile?.username &&
+        !await _service.isUsernameAvailable(normalized)) {
+      throw 'Esse username já está em uso.';
     }
-  }
-
-  // === Amigos ===
-  Future<void> fetchFriends(String username) async {
-    try {
-      _amigos = await _authService.fetchFriends(username!);
-      notifyListeners();
-    } catch (error) {
-      debugPrint('Erro ao buscar amigos: $error');
-      rethrow;
+    String? avatarUrl;
+    if (avatarBytes != null) {
+      avatarUrl =
+          await _service.uploadAvatar(avatarBytes, avatarExtension ?? 'jpg');
     }
-  }
-  Future<void> fetchReviews(String username) async {
-    try {
-      _reviews = await _authService.fetchReviews(username);
-      notifyListeners();
-    } catch (error) {
-      debugPrint('Erro ao buscar reviews: $error');
-      rethrow;
-    }
-  }
-
-  Future<void> addFriend(String emailFriend) async {
-    if (_token != null && _email != null) {
-      try {
-        await _authService.addFriend(_email!, emailFriend, _token!);
-        await fetchFriends(_username!);
-      } catch (error) {
-        debugPrint('Erro ao adicionar amigo: $error');
-        rethrow;
-      }
-    }
-  }
-
-  Future<void> removeFriend(String emailFriend) async {
-    if (_token != null && _email != null) {
-      try {
-        await _authService.removeFriend(_email!, emailFriend, _token!);
-        await fetchFriends(_username!);
-      } catch (error) {
-        debugPrint('Erro ao remover amigo: $error');
-        rethrow;
-      }
-    }
-  }
-
-  // === Filmes ===
-Future<void> fetchFilmes() async {
-  if (_token == null) {
-    throw Exception('Usuário não está autenticado!');
-  }
-
-  try {
-    // Realiza a requisição para buscar os filmes
-    _filmes = await _authService.fetchFilmes(_token!);
-    debugPrint('Filmes recebidos: $_filmes');
-    notifyListeners();
-  } catch (error) {
-    debugPrint('Erro ao buscar filmes: $error');
-    rethrow;
-  }
-}
-
-  // === Avaliações ===
-Future<void> publishReview(String reviewText, int rating) async {
-  if (_token == null) {
-    throw Exception('Usuário não está autenticado!');
-  }
-
-  try {
-    await _authService.publishReview(
-      _email!,
-      reviewText,
-      rating,
-      _token!,
+    _profile = await _service.updateProfile(
+      name: nome.trim(),
+      username: normalized,
+      bio: descricao.trim(),
+      avatarUrl: avatarUrl,
     );
-    await fetchAllReviews(); // Atualiza a lista de todas as reviews
-  } catch (error) {
-    debugPrint('Erro ao publicar a avaliação: $error');
-    rethrow;
+    notifyListeners();
   }
 }
 
-  // === Armazenamento local ===
-  Future<void> _loadUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('authToken');
-    _nome = prefs.getString('nome');
-    _username = prefs.getString('username');
-    _avatar = prefs.getString('avatar');
-    _descricao = prefs.getString('descricao');
-
-    if (_token != null) {
-      await setCredentials(_token!);
-    }
-    notifyListeners();
+/// Traduz os erros mais comuns do Supabase Auth.
+String friendlyAuthError(AuthException e) {
+  final msg = e.message.toLowerCase();
+  if (msg.contains('invalid login credentials')) {
+    return 'Email ou senha incorretos.';
   }
-
-  Future<void> setAuthToken(String? token) async {
-    _token = token;
-    if (_token != null) {
-      await _saveAuthToken(_token!);
-      await setCredentials(_token!);
-    }
-    notifyListeners();
+  if (msg.contains('email not confirmed')) {
+    return 'Confirme seu email antes de entrar (veja sua caixa de entrada).';
   }
-
-  Future<void> _saveAuthToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setString('authToken', token);
+  if (msg.contains('already registered') || msg.contains('already been registered')) {
+    return 'Já existe uma conta com esse email.';
   }
-
-  Future<void> setCredentials(String token) async {
-    try {
-      final responseCredentials =
-          await _authService.verifyAuthentication(token);
-      final responseDecoded = responseCredentials['decode'];
-      _nome = responseDecoded['name'];
-      _username = responseDecoded['username'];
-      _email = responseDecoded['email'];
-      _avatar = responseDecoded['avatar'];
-      _descricao = responseDecoded['description'];
-      notifyListeners();
-    } catch (err) {
-      debugPrint('Falha ao carregar credenciais: $err');
-    }
+  if (msg.contains('password')) {
+    return 'Senha inválida: use pelo menos 8 caracteres.';
   }
-  Future<void> addReview(String movieName, int rating) async {
-  if (_token == null) {
-    throw Exception('Usuário não está autenticado!');
+  if (msg.contains('rate limit') || msg.contains('too many')) {
+    return 'Muitas tentativas. Aguarde um pouco e tente novamente.';
   }
-
-  try {
-    // Aqui você pode adicionar lógica para enviar a review ao seu banco de dados
-    await _authService.publishReview(_email!, movieName, rating, _token!);
-    // Atualiza a lista de todas as reviews
-    await fetchAllReviews();
-  } catch (error) {
-    debugPrint('Erro ao publicar a avaliação: $error');
-    rethrow;
+  if (msg.contains('invalid') && msg.contains('email')) {
+    return 'Email inválido.';
   }
+  return e.message;
 }
+
+/// Mensagem legível para qualquer erro vindo do Supabase.
+String friendlyError(Object e) {
+  if (e is String) return e;
+  if (e is AuthException) return friendlyAuthError(e);
+  if (e is PostgrestException) {
+    if (e.code == '23505') return 'Esse registro já existe.';
+    if (e.code == '23514') return 'Dados inválidos. Verifique os campos.';
+    if (e.code == '42501') return 'Você não tem permissão para isso.';
+    return e.message;
+  }
+  if (e is StorageException) return 'Erro ao enviar imagem: ${e.message}';
+  return 'Algo deu errado. Verifique sua conexão e tente novamente.';
 }

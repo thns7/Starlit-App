@@ -124,7 +124,7 @@ class _EntrarState extends State<Entrar> with SingleTickerProviderStateMixin {
                               onPressed: () {
                                 Navigator.of(context).push(
                                   PageRouteBuilder(
-                                    pageBuilder: (context, animation, secondaryAnimation) => Cadastro(),
+                                    pageBuilder: (context, animation, secondaryAnimation) => const Cadastro(),
                                     transitionsBuilder: (context, animation, secondaryAnimation, child) {
                                       const begin = Offset(1.0, 0.0); // Começa da direita
                                       const end = Offset.zero;

@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
 import 'package:starlitfilms/screens/homepage.dart';
@@ -16,12 +19,23 @@ class _CadastroState extends State<Cadastro> {
   final _passwordController = TextEditingController();
   final _passwordConfirmController = TextEditingController();
   final _nameController = TextEditingController();
-  final _avatarController = TextEditingController();
-  final _usernameController = TextEditingController();  // Novo controller
-  
+  final _usernameController = TextEditingController();
+
   bool _obscurePassword = true;
   bool _obscurePasswordConfirm = true;
-  String? _profileImageUrl;
+  bool _isLoading = false;
+  Uint8List? _avatarBytes;
+  String? _avatarExtension;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _passwordConfirmController.dispose();
+    _nameController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,9 +75,9 @@ class _CadastroState extends State<Cadastro> {
                       children: [
                         _buildTextField(_nameController, 'Nome', Icons.person),
                         const SizedBox(height: 20),
-                        _buildTextField(_usernameController, 'Username', Icons.account_circle),  // Novo campo
+                        _buildTextField(_usernameController, 'Username', Icons.account_circle, keyboardType: TextInputType.visiblePassword),
                         const SizedBox(height: 20),
-                        _buildTextField(_emailController, 'Email', Icons.email),
+                        _buildTextField(_emailController, 'Email', Icons.email, keyboardType: TextInputType.emailAddress),
                         const SizedBox(height: 20),
                         _buildTextField(_passwordController, 'Senha', Icons.lock, isPassword: true),
                         const SizedBox(height: 20),
@@ -87,11 +101,13 @@ class _CadastroState extends State<Cadastro> {
                               width: 331,
                               height: 49,
                               child: ElevatedButton(
-                                onPressed: () async {
-                                  if (_validateFields()) {
-                                    await _showProfilePictureDialog();
-                                  }
-                                },
+                                onPressed: _isLoading
+                                    ? null
+                                    : () async {
+                                        if (_validateFields()) {
+                                          await _showProfilePictureDialog();
+                                        }
+                                      },
                                 style: ElevatedButton.styleFrom(
                                   padding: EdgeInsets.zero,
                                   shape: RoundedRectangleBorder(
@@ -109,7 +125,12 @@ class _CadastroState extends State<Cadastro> {
                                   ),
                                   child: Container(
                                     alignment: Alignment.center,
-                                    child: const Text(
+                                    child: _isLoading
+                                        ? const CircularProgressIndicator(
+                                            strokeWidth: 3,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          )
+                                        : const Text(
                                       'Criar Conta',
                                       style: TextStyle(
                                         fontFamily: "Poppins",
@@ -177,38 +198,57 @@ class _CadastroState extends State<Cadastro> {
     );
   }
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
   bool _validateFields() {
-    if (_nameController.text.isEmpty ||
-        _usernameController.text.isEmpty ||  // Validação do campo username
-        _emailController.text.isEmpty ||
+    final username = _usernameController.text.trim().toLowerCase();
+    final email = _emailController.text.trim();
+    if (_nameController.text.trim().isEmpty ||
+        username.isEmpty ||
+        email.isEmpty ||
         _passwordController.text.isEmpty ||
         _passwordConfirmController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Todos os campos devem ser preenchidos'),
-        ),
-      );
+      _showError('Todos os campos devem ser preenchidos');
       return false;
     }
-
+    if (!RegExp(r'^[a-z0-9_.]{3,30}$').hasMatch(username)) {
+      _showError('O username deve ter de 3 a 30 caracteres: letras, números, "_" ou "."');
+      return false;
+    }
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      _showError('Insira um email válido');
+      return false;
+    }
     if (_passwordController.text.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Insira uma senha com no mínimo 8 caracteres'),
-        ),
-      );
+      _showError('Insira uma senha com no mínimo 8 caracteres');
       return false;
     }
-
     if (_passwordController.text != _passwordConfirmController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('As senhas não coincidem'),
-        ),
-      );
+      _showError('As senhas não coincidem');
       return false;
     }
     return true;
+  }
+
+  Future<void> _pickAvatar(StateSetter setDialogState) async {
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    final ext = file.name.contains('.') ? file.name.split('.').last : 'jpg';
+    setState(() {
+      _avatarBytes = bytes;
+      _avatarExtension = ext;
+    });
+    setDialogState(() {});
   }
 
 Future<void> _showProfilePictureDialog() async {
@@ -236,32 +276,28 @@ Future<void> _showProfilePictureDialog() async {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundImage: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
-                      ? NetworkImage(_profileImageUrl!)
-                      : const AssetImage('assets/default_profile.png') as ImageProvider,
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: _avatarController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'URL da Imagem',
-                    labelStyle: const TextStyle(color: Colors.white70),
-                    prefixIcon: const Icon(Icons.link, color: Colors.white),
-                    filled: true,
-                    fillColor: const Color(0xFF5936B2).withOpacity(0.2),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.0),
-                      borderSide: BorderSide.none,
+                StatefulBuilder(
+                  builder: (context, setDialogState) => GestureDetector(
+                    onTap: () => _pickAvatar(setDialogState),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: const Color(0xFF5936B2),
+                          backgroundImage:
+                              _avatarBytes != null ? MemoryImage(_avatarBytes!) : null,
+                          child: _avatarBytes == null
+                              ? const Icon(Icons.add_a_photo, color: Colors.white, size: 36)
+                              : null,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _avatarBytes == null ? 'Escolher foto de perfil' : 'Trocar foto',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      ],
                     ),
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      _profileImageUrl = value;
-                    });
-                  },
                 ),
                 const SizedBox(height: 24),
                 TextButton(
@@ -272,6 +308,10 @@ Future<void> _showProfilePictureDialog() async {
                     ),
                   ),
                   onPressed: () {
+                    setState(() {
+                      _avatarBytes = null;
+                      _avatarExtension = null;
+                    });
                     Navigator.of(context).pop();
                     _registerUser();
                   },
@@ -311,23 +351,51 @@ Future<void> _showProfilePictureDialog() async {
 }
 
 
-  void _registerUser() async {
-    final name = _nameController.text;
-    final username = _usernameController.text;  // Adicionado
-    final email = _emailController.text;
-    final password = _passwordController.text;
-    final avatarUrl = _avatarController.text;
-
+  Future<void> _registerUser() async {
+    setState(() => _isLoading = true);
     try {
-      await Provider.of<AuthProvider>(context, listen: false)
-          .register(name, username, email, password, avatarUrl);  // Passando o username
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => HomePage()),
+      final result = await Provider.of<AuthProvider>(context, listen: false).register(
+        nome: _nameController.text,
+        username: _usernameController.text,
+        email: _emailController.text,
+        password: _passwordController.text,
+        avatarBytes: _avatarBytes,
+        avatarExtension: _avatarExtension,
       );
-    } catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Falha ao se registrar: $error')),
-      );
+      if (!mounted) return;
+      if (result == RegisterResult.loggedIn) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const HomePage()),
+          (route) => false,
+        );
+      } else {
+        await showDialog(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: const Color(0xFF150B2E),
+            title: const Text('Confirme seu email', style: TextStyle(color: Colors.white)),
+            content: Text(
+              'Enviamos um link de confirmação para ${_emailController.text.trim()}. '
+              'Depois de confirmar, faça login. Você pode adicionar sua foto em "Editar Perfil".',
+              style: const TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Ir para o login', style: TextStyle(color: Color(0xff7E56E4))),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const Login()),
+        );
+      }
+    } catch (e) {
+      if (mounted) _showError(friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -337,12 +405,16 @@ Future<void> _showProfilePictureDialog() async {
     IconData icon, {
     bool isPassword = false,
     bool isConfirm = false,
+    TextInputType? keyboardType,
   }) {
+    final obscured = isConfirm ? _obscurePasswordConfirm : _obscurePassword;
     return SizedBox(
       width: 331,
       height: 49,
       child: TextField(
         controller: controller,
+        keyboardType: keyboardType,
+        autocorrect: !isPassword && keyboardType == null,
         obscureText: isPassword ? (isConfirm ? _obscurePasswordConfirm : _obscurePassword) : false,
         style: const TextStyle(
           fontFamily: "Poppins",
@@ -360,6 +432,19 @@ Future<void> _showProfilePictureDialog() async {
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Icon(icon, color: Colors.white),
           ),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(obscured ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.white70),
+                  onPressed: () => setState(() {
+                    if (isConfirm) {
+                      _obscurePasswordConfirm = !_obscurePasswordConfirm;
+                    } else {
+                      _obscurePassword = !_obscurePassword;
+                    }
+                  }),
+                )
+              : null,
           filled: true,
           fillColor: const Color(0xFF5936B2).withOpacity(0.2),
           border: OutlineInputBorder(

@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
 import 'package:starlitfilms/screens/register.dart';
 import 'package:starlitfilms/screens/homepage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -44,16 +43,14 @@ class _LoginState extends State<Login> {
               padding: const EdgeInsets.symmetric(horizontal: 30.0),
               child: Column(
                 children: [
-                  _buildTextField(_emailController, 'Email', Icons.email),
+                  _buildTextField(_emailController, 'Email', Icons.email, keyboardType: TextInputType.emailAddress),
                   const SizedBox(height: 30),
                   _buildPasswordField(),
                   const SizedBox(height: 10),
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {
-                        // Lógica para recuperar senha
-                      },
+                      onPressed: _showResetPasswordDialog,
                       child: const Text(
                         'Esqueceu sua senha?',
                         style: TextStyle(
@@ -125,7 +122,7 @@ class _LoginState extends State<Login> {
                     onPressed: () {
                       // Navegação para a tela de registro usando PageRouteBuilder para animação
                       Navigator.of(context).push(PageRouteBuilder(
-                        pageBuilder: (context, animation, secondaryAnimation) => Cadastro(),
+                        pageBuilder: (context, animation, secondaryAnimation) => const Cadastro(),
                         transitionsBuilder: (context, animation, secondaryAnimation, child) {
                           const begin = Offset(1.0, 0.0);
                           const end = Offset.zero;
@@ -173,12 +170,15 @@ class _LoginState extends State<Login> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String labelText, IconData icon) {
+  Widget _buildTextField(TextEditingController controller, String labelText, IconData icon,
+      {TextInputType? keyboardType}) {
     return SizedBox(
       width: 331,
       height: 49,
       child: TextField(
         controller: controller,
+        keyboardType: keyboardType,
+        autocorrect: false,
         style: const TextStyle(
           fontFamily: "Poppins",
           color: Colors.white,
@@ -253,7 +253,7 @@ class _LoginState extends State<Login> {
 
   void _login() {
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -268,33 +268,67 @@ class _LoginState extends State<Login> {
     _performLogin(email, password);
   }
 
-  void _performLogin(String email, String password) async {
-  setState(() { _isLoading = true; });
-
-  try {
-    var tryLogin = await Provider.of<AuthProvider>(context, listen: false).login(email, password);
-    if (tryLogin) {
-      // Armazena o token após o login
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('authToken', Provider.of<AuthProvider>(context, listen: false).authToken);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login realizado com sucesso!'), backgroundColor: const Color(0xff7E56E4)),
+  Future<void> _performLogin(String email, String password) async {
+    setState(() => _isLoading = true);
+    try {
+      await Provider.of<AuthProvider>(context, listen: false).login(email, password);
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomePage()),
+        (route) => false,
       );
-
-      await Future.delayed(const Duration(seconds: 1));
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => HomePage()));
-    } else {
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Falha no login. Tente novamente.'), backgroundColor: Colors.red),
+        SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red),
       );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Erro ao fazer login: $e'), backgroundColor: Colors.red),
-    );
-  } finally {
-    setState(() { _isLoading = false; });
   }
-}
+
+  void _showResetPasswordDialog() {
+    final controller = TextEditingController(text: _emailController.text.trim());
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF150B2E),
+        title: const Text('Recuperar senha', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.emailAddress,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            labelText: 'Email da conta',
+            labelStyle: TextStyle(color: Colors.white70),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              final auth = Provider.of<AuthProvider>(context, listen: false);
+              Navigator.of(dialogContext).pop();
+              try {
+                await auth.resetPassword(controller.text);
+                messenger.showSnackBar(const SnackBar(
+                  content: Text('Se o email existir, você receberá um link para redefinir a senha.'),
+                  backgroundColor: Color(0xff7E56E4),
+                ));
+              } catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Enviar', style: TextStyle(color: Color(0xff7E56E4))),
+          ),
+        ],
+      ),
+    );
+  }
 }
