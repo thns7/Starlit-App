@@ -24,16 +24,19 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
 
-      # Se os secrets SUPABASE_URL / SUPABASE_ANON_KEY existirem no repositório,
-      # eles têm prioridade sobre os valores padrão de lib/config.dart.
+      # Secrets do repositório (Settings → Secrets and variables → Actions):
+      # TMDB_TOKEN ativa os filmes do TMDB. SUPABASE_URL / SUPABASE_ANON_KEY,
+      # se existirem, têm prioridade sobre os valores padrão de lib/config.dart.
       - name: Build APK
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
         run: |
           ARGS=""
           if [ -n "$SUPABASE_URL" ]; then ARGS="$ARGS --dart-define=SUPABASE_URL=$SUPABASE_URL"; fi
           if [ -n "$SUPABASE_ANON_KEY" ]; then ARGS="$ARGS --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"; fi
+          if [ -n "$TMDB_TOKEN" ]; then ARGS="$ARGS --dart-define=TMDB_TOKEN=$TMDB_TOKEN"; else echo "::warning::Secret TMDB_TOKEN não configurado: APK sem filmes do TMDB"; fi
           flutter build apk --release $ARGS
 
       - uses: actions/upload-artifact@v4
