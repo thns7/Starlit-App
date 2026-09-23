@@ -3,7 +3,12 @@ import 'dart:async';
 import 'package:animated_notch_bottom_bar/animated_notch_bottom_bar/animated_notch_bottom_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:starlitfilms/components/movie_carousel.dart';
 import 'package:starlitfilms/components/new_review_sheet.dart';
+import 'package:starlitfilms/config.dart';
+import 'package:starlitfilms/models/movie.dart';
+import 'package:starlitfilms/screens/filme.dart';
+import 'package:starlitfilms/services/tmdb_service.dart';
 import 'package:starlitfilms/components/review_card.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
 import 'package:starlitfilms/models/review.dart';
@@ -29,6 +34,26 @@ class _HomePageState extends State<HomePage> {
   bool _loading = true;
   String? _error;
 
+  Future<List<TmdbMovie>>? _nowPlaying;
+  Future<List<TmdbMovie>>? _upcoming;
+  Future<List<TmdbMovie>>? _trending;
+  Future<List<TmdbMovie>>? _searchResults;
+
+  void _loadMovies() {
+    if (!AppConfig.hasTmdb) return;
+    final tmdb = TmdbService.instance;
+    _nowPlaying = tmdb.nowPlaying();
+    _upcoming = tmdb.upcoming();
+    _trending = tmdb.trending();
+  }
+
+  void _openMovie(TmdbMovie movie) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => MovieDetailPage(movie: movie)),
+    ).then((_) => _loadFeed());
+  }
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +61,7 @@ class _HomePageState extends State<HomePage> {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       if (auth.profile == null) auth.loadProfile();
     });
+    _loadMovies();
     _loadFeed();
   }
 
@@ -64,7 +90,20 @@ class _HomePageState extends State<HomePage> {
 
   void _onSearchChanged(String _) {
     _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 400), _loadFeed);
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      final q = _searchController.text.trim();
+      setState(() {
+        _searchResults = (AppConfig.hasTmdb && q.isNotEmpty)
+            ? TmdbService.instance.search(q)
+            : null;
+      });
+      _loadFeed();
+    });
+  }
+
+  Future<void> _refreshAll() async {
+    setState(_loadMovies);
+    await _loadFeed();
   }
 
   Future<void> _openReview(int index) async {
@@ -115,7 +154,7 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       child: RefreshIndicator(
-        onRefresh: _loadFeed,
+        onRefresh: _refreshAll,
         child: ListView(
           padding: const EdgeInsets.only(bottom: 120),
           children: [
@@ -165,14 +204,39 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 10),
+            if (_searchResults != null)
+              MovieCarousel(
+                title: 'Filmes encontrados',
+                future: _searchResults!,
+                onTap: _openMovie,
+              )
+            else if (_nowPlaying != null) ...[
+              MovieCarousel(
+                title: 'Em cartaz',
+                future: _nowPlaying!,
+                onTap: _openMovie,
+              ),
+              MovieCarousel(
+                title: 'Em breve',
+                future: _upcoming!,
+                onTap: _openMovie,
+                showReleaseDate: true,
+              ),
+              MovieCarousel(
+                title: 'Em alta na semana',
+                future: _trending!,
+                onTap: _openMovie,
+              ),
+            ],
+            const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.only(left: 30, right: 20),
               child: Row(
                 children: [
                   const Expanded(
                     child: Text(
-                      'Destaques',
+                      'Reviews da comunidade',
                       style: TextStyle(
                         fontFamily: "Poppins",
                         color: Colors.white,

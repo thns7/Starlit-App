@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:starlitfilms/components/movie_picker.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
 import 'package:starlitfilms/models/movie.dart';
 import 'package:starlitfilms/services/supabase_service.dart';
 
 /// Abre o formulário de nova review. Retorna true se uma review foi publicada.
-Future<bool> showNewReviewSheet(BuildContext context) async {
+Future<bool> showNewReviewSheet(BuildContext context,
+    {Movie? initialMovie}) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (context) => const NewReviewSheet(),
+    builder: (context) => NewReviewSheet(initialMovie: initialMovie),
   );
   return result ?? false;
 }
 
 class NewReviewSheet extends StatefulWidget {
-  const NewReviewSheet({super.key});
+  final Movie? initialMovie;
+
+  const NewReviewSheet({super.key, this.initialMovie});
 
   @override
   State<NewReviewSheet> createState() => _NewReviewSheetState();
@@ -25,34 +29,15 @@ class _NewReviewSheetState extends State<NewReviewSheet> {
   final _service = SupabaseService.instance;
   final _contentController = TextEditingController();
 
-  List<Movie> _movies = [];
-  Movie? _selectedMovie;
+  late Movie? _selectedMovie = widget.initialMovie;
   int _rating = 0;
   bool _isPublic = true;
-  bool _loadingMovies = true;
   bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMovies();
-  }
 
   @override
   void dispose() {
     _contentController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadMovies() async {
-    try {
-      final movies = await _service.fetchMovies();
-      if (mounted) setState(() => _movies = movies);
-    } catch (e) {
-      _showError(friendlyError(e));
-    } finally {
-      if (mounted) setState(() => _loadingMovies = false);
-    }
   }
 
   void _showError(String message) {
@@ -62,89 +47,12 @@ class _NewReviewSheetState extends State<NewReviewSheet> {
     );
   }
 
-  Future<void> _addMovieDialog() async {
-    final titleController = TextEditingController();
-    final yearController = TextEditingController();
-    final posterController = TextEditingController();
-
-    final created = await showDialog<Movie>(
-      context: context,
-      builder: (dialogContext) {
-        bool saving = false;
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) => AlertDialog(
-            backgroundColor: const Color(0xFF150B2E),
-            title: const Text('Adicionar filme', style: TextStyle(color: Colors.white)),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _dialogField(titleController, 'Título'),
-                  _dialogField(yearController, 'Ano (opcional)',
-                      keyboardType: TextInputType.number),
-                  _dialogField(posterController, 'URL do pôster (opcional)',
-                      keyboardType: TextInputType.url),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Cancelar', style: TextStyle(color: Colors.white70)),
-              ),
-              TextButton(
-                onPressed: saving
-                    ? null
-                    : () async {
-                        if (titleController.text.trim().isEmpty) return;
-                        setDialogState(() => saving = true);
-                        try {
-                          final movie = await _service.addMovie(
-                            title: titleController.text,
-                            year: int.tryParse(yearController.text.trim()),
-                            posterUrl: posterController.text,
-                          );
-                          if (dialogContext.mounted) {
-                            Navigator.of(dialogContext).pop(movie);
-                          }
-                        } catch (e) {
-                          setDialogState(() => saving = false);
-                          _showError(friendlyError(e) == 'Esse registro já existe.'
-                              ? 'Esse filme já está na lista.'
-                              : friendlyError(e));
-                        }
-                      },
-                child: const Text('Adicionar', style: TextStyle(color: Color(0xff7E56E4))),
-              ),
-            ],
-          ),
-        );
-      },
+  Future<void> _pickMovie() async {
+    final movie = await Navigator.push<Movie>(
+      context,
+      MaterialPageRoute(builder: (_) => const MoviePickerPage()),
     );
-
-    if (created != null && mounted) {
-      setState(() {
-        _movies = [..._movies, created]
-          ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-        _selectedMovie = created;
-      });
-    }
-  }
-
-  Widget _dialogField(TextEditingController controller, String label,
-      {TextInputType? keyboardType}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: const TextStyle(color: Colors.white),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(color: Colors.white70),
-        ),
-      ),
-    );
+    if (movie != null && mounted) setState(() => _selectedMovie = movie);
   }
 
   Future<void> _publish() async {
@@ -202,46 +110,48 @@ class _NewReviewSheetState extends State<NewReviewSheet> {
               ),
             ),
             const SizedBox(height: 20),
-            if (_loadingMovies)
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: CircularProgressIndicator(),
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<Movie>(
-                      value: _selectedMovie,
-                      isExpanded: true,
-                      style: const TextStyle(color: Colors.white),
-                      dropdownColor: const Color(0xFF3A267F),
-                      decoration: InputDecoration(
-                        hintText: 'Selecione o filme',
-                        hintStyle: const TextStyle(color: Colors.white70),
-                        filled: true,
-                        fillColor: const Color(0xFF3A267F),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
+            InkWell(
+              onTap: _pickMovie,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3A267F),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    if (_selectedMovie?.posterUrl != null)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(
+                          _selectedMovie!.posterUrl!,
+                          width: 40,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              const Icon(Icons.movie, color: Colors.white54),
+                        ),
+                      )
+                    else
+                      const Icon(Icons.movie, color: Colors.white54),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _selectedMovie?.label ?? 'Escolher filme',
+                        style: TextStyle(
+                          color: _selectedMovie == null
+                              ? Colors.white70
+                              : Colors.white,
+                          fontSize: 16,
                         ),
                       ),
-                      items: _movies
-                          .map((m) => DropdownMenuItem<Movie>(
-                                value: m,
-                                child: Text(m.label, overflow: TextOverflow.ellipsis),
-                              ))
-                          .toList(),
-                      onChanged: (value) => setState(() => _selectedMovie = value),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Adicionar filme',
-                    icon: const Icon(Icons.add_circle, color: Color(0xff9670F5), size: 32),
-                    onPressed: _addMovieDialog,
-                  ),
-                ],
+                    const Icon(Icons.search, color: Colors.white70),
+                  ],
+                ),
               ),
+            ),
             const SizedBox(height: 20),
             TextField(
               controller: _contentController,
@@ -280,7 +190,9 @@ class _NewReviewSheetState extends State<NewReviewSheet> {
                     constraints: const BoxConstraints(),
                     icon: Icon(
                       Icons.star,
-                      color: index < _rating ? const Color(0xff7E56E4) : Colors.grey,
+                      color: index < _rating
+                          ? const Color(0xff7E56E4)
+                          : Colors.grey,
                       size: 32,
                     ),
                     onPressed: () => setState(() => _rating = index + 1),
@@ -298,7 +210,8 @@ class _NewReviewSheetState extends State<NewReviewSheet> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xff7E56E4),
                 minimumSize: const Size(double.infinity, 52),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15)),
                 elevation: 10,
               ),
               child: _saving

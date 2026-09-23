@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:starlitfilms/components/review_card.dart';
 import 'package:starlitfilms/components/user_avatar.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
+import 'package:starlitfilms/models/movie.dart';
 import 'package:starlitfilms/models/review.dart';
+import 'package:starlitfilms/screens/filme.dart';
 import 'package:starlitfilms/screens/biblioteca.dart';
 import 'package:starlitfilms/services/supabase_service.dart';
 
@@ -110,17 +112,20 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF150B2E),
-        title: const Text('Apagar review?', style: TextStyle(color: Colors.white)),
+        title:
+            const Text('Apagar review?', style: TextStyle(color: Colors.white)),
         content: const Text('Essa ação não pode ser desfeita.',
             style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.white70)),
+            child:
+                const Text('Cancelar', style: TextStyle(color: Colors.white70)),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Apagar', style: TextStyle(color: Color(0xffFE2137))),
+            child: const Text('Apagar',
+                style: TextStyle(color: Color(0xffFE2137))),
           ),
         ],
       ),
@@ -174,27 +179,39 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    SizedBox(
-                      height: 280,
-                      child: MoviePosterBackground(
-                        posterUrl: _review.movie.posterUrl,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 90, 16, 16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Text(
-                                _review.movie.label,
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                    GestureDetector(
+                      onTap: _review.movie.tmdbId == null
+                          ? null
+                          : () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => MovieDetailPage(
+                                      movie:
+                                          TmdbMovie.fromMovie(_review.movie)),
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              StarRow(rating: _review.rating, size: 24),
-                            ],
+                      child: SizedBox(
+                        height: 280,
+                        child: MoviePosterBackground(
+                          posterUrl: _review.movie.posterUrl,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 90, 16, 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  _review.movie.label,
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                StarRow(rating: _review.rating, size: 24),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -204,7 +221,8 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
                       leading: UserAvatar.of(_review.author),
                       title: Text(_review.author.displayName,
                           style: const TextStyle(color: Colors.white)),
-                      subtitle: Text('@${_review.author.username} · ${_formatDate(_review.createdAt)}',
+                      subtitle: Text(
+                          '@${_review.author.username} · ${_formatDate(_review.createdAt)}',
                           style: const TextStyle(color: Colors.white54)),
                       trailing: _review.isPublic
                           ? null
@@ -217,24 +235,29 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
                         _review.content,
-                        style: const TextStyle(fontSize: 16, color: Colors.white),
+                        style:
+                            const TextStyle(fontSize: 16, color: Colors.white),
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 8),
                       child: Row(
                         children: [
                           IconButton(
                             onPressed: _toggleLike,
                             icon: Icon(
-                              _review.likedByMe ? Icons.favorite : Icons.favorite_border,
+                              _review.likedByMe
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
                               color: starColor,
                             ),
                           ),
                           Text('${_review.likeCount}',
                               style: const TextStyle(color: Colors.white)),
                           const SizedBox(width: 16),
-                          const Icon(Icons.chat_bubble_outline, color: starColor),
+                          const Icon(Icons.chat_bubble_outline,
+                              color: starColor),
                           const SizedBox(width: 8),
                           Text('${_review.commentCount}',
                               style: const TextStyle(color: Colors.white)),
@@ -251,7 +274,8 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
                       const Padding(
                         padding: EdgeInsets.all(24),
                         child: Center(
-                          child: Text('Nenhum comentário ainda. Seja o primeiro!',
+                          child: Text(
+                              'Nenhum comentário ainda. Seja o primeiro!',
                               style: TextStyle(color: Colors.white54)),
                         ),
                       )
@@ -262,12 +286,15 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
                               child: UserAvatar.of(c.author, radius: 18),
                             ),
                             title: Text('@${c.author.username}',
-                                style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 13)),
                             subtitle: Text(c.content,
-                                style: const TextStyle(color: Colors.white, fontSize: 15)),
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 15)),
                             trailing: c.author.id == _service.currentUserId
                                 ? IconButton(
-                                    icon: const Icon(Icons.close, color: Colors.white38, size: 18),
+                                    icon: const Icon(Icons.close,
+                                        color: Colors.white38, size: 18),
                                     onPressed: () => _deleteComment(c),
                                   )
                                 : null,

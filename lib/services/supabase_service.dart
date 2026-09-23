@@ -16,10 +16,10 @@ class SupabaseService {
   String? get currentUserId => _db.auth.currentUser?.id;
 
   static const _profileFields = 'id, username, name, bio, avatar_url';
-  static const _reviewSelect = '''
+  static final _reviewSelect = '''
     id, content, rating, is_public, created_at,
     author:profiles($_profileFields),
-    movie:movies(id, title, year, poster_url),
+    movie:movies(${Movie.selectFields}),
     likes:review_likes(count),
     comments(count),
     my_like:review_likes(user_id)
@@ -93,10 +93,8 @@ class SupabaseService {
   // ===================== Filmes =====================
 
   Future<List<Movie>> fetchMovies() async {
-    final data = await _db
-        .from('movies')
-        .select('id, title, year, poster_url')
-        .order('title');
+    final data =
+        await _db.from('movies').select(Movie.selectFields).order('title');
     return data.map(Movie.fromJson).toList();
   }
 
@@ -110,15 +108,66 @@ class SupabaseService {
         .insert({
           'title': title.trim(),
           'year': year,
-          'poster_url':
-              (posterUrl == null || posterUrl.trim().isEmpty) ? null : posterUrl.trim(),
+          'poster_url': (posterUrl == null || posterUrl.trim().isEmpty)
+              ? null
+              : posterUrl.trim(),
         })
-        .select('id, title, year, poster_url')
+        .select(Movie.selectFields)
         .single();
     return Movie.fromJson(data);
   }
 
+  /// Grava (ou atualiza) um filme do TMDB no banco e devolve o registro local.
+  Future<Movie> ensureTmdbMovie(TmdbMovie movie) async {
+    final id = await _db.rpc('ensure_tmdb_movie', params: {
+      'p_tmdb_id': movie.tmdbId,
+      'p_title': movie.title,
+      'p_release_date': movie.releaseDate?.toIso8601String().substring(0, 10),
+      'p_poster_url': movie.posterUrl,
+      'p_backdrop_url': movie.backdropUrl,
+      'p_overview': movie.overview.isEmpty ? null : movie.overview,
+    });
+    return Movie(
+      id: id as int,
+      title: movie.title,
+      year: movie.year,
+      posterUrl: movie.posterUrl,
+      tmdbId: movie.tmdbId,
+      overview: movie.overview,
+      backdropUrl: movie.backdropUrl,
+    );
+  }
+
+  Future<Movie?> findMovieByTmdbId(int tmdbId) async {
+    final data = await _db
+        .from('movies')
+        .select(Movie.selectFields)
+        .eq('tmdb_id', tmdbId)
+        .maybeSingle();
+    return data == null ? null : Movie.fromJson(data);
+  }
+
+  Future<List<Movie>> searchLocalMovies(String query) async {
+    final q = query.trim().replaceAll('%', '');
+    var request = _db.from('movies').select(Movie.selectFields);
+    if (q.isNotEmpty) request = request.ilike('title', '%$q%');
+    final data = await request.order('title').limit(30);
+    return data.map(Movie.fromJson).toList();
+  }
+
   // ===================== Reviews =====================
+
+  Future<List<Review>> fetchMovieReviews(int movieId) async {
+    final data = await _db
+        .from('reviews')
+        .select(_reviewSelect)
+        .eq('my_like.user_id', currentUserId!)
+        .eq('movie_id', movieId)
+        .order('created_at', ascending: false);
+    return data
+        .map((j) => Review.fromJson(j, currentUserId: currentUserId))
+        .toList();
+  }
 
   Future<List<Review>> fetchFeed({String? search}) async {
     var request = _db
@@ -248,14 +297,11 @@ class SupabaseService {
 
   Future<List<Map<String, dynamic>>> _friendshipRows() async {
     final me = currentUserId!;
-    return await _db
-        .from('friendships')
-        .select('''
+    return await _db.from('friendships').select('''
           requester_id, addressee_id, status,
           requester:profiles!friendships_requester_id_fkey($_profileFields),
           addressee:profiles!friendships_addressee_id_fkey($_profileFields)
-        ''')
-        .or('requester_id.eq.$me,addressee_id.eq.$me');
+        ''').or('requester_id.eq.$me,addressee_id.eq.$me');
   }
 
   /// Amigos aceitos.

@@ -151,8 +151,14 @@ class ReviewCard extends StatelessWidget {
 class ReviewListTile extends StatelessWidget {
   final Review review;
   final VoidCallback onTap;
+  final bool showAuthor;
 
-  const ReviewListTile({super.key, required this.review, required this.onTap});
+  const ReviewListTile({
+    super.key,
+    required this.review,
+    required this.onTap,
+    this.showAuthor = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -172,7 +178,7 @@ class ReviewListTile extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    review.movie.title,
+                    showAuthor ? '@${review.author.username}' : review.movie.title,
                     style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,

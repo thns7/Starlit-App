@@ -16,7 +16,8 @@
 - Perfil com foto (upload para o Supabase Storage), nome, @username e descrição
 - Reviews de filmes com nota de 1 a 5, públicas ou só para amigos
 - Curtidas e comentários nas reviews
-- Busca de reviews por filme e cadastro de novos filmes
+- Filmes reais do TMDB: em cartaz, próximos lançamentos, em alta, busca e página de detalhes
+- Busca de reviews por filme
 - Amizades com pedido/aceite e busca de usuários
 - Chat em tempo real entre amigos (Supabase Realtime)
 
@@ -31,7 +32,15 @@ segurança (Row Level Security), bucket de avatares e um catálogo inicial de fi
    (ou use a CLI: `supabase link` + `supabase db push`).
 3. Em **Authentication → Sign In / Providers → Email**, decida se quer exigir confirmação de
    email. Com ela ligada, o usuário precisa clicar no link do email antes do primeiro login.
-4. Em **Project Settings → API**, copie a *Project URL* e a chave *publishable* (ou *anon*).
+4. Execute também `supabase/migrations/20260924000000_tmdb.sql` (integração com o TMDB).
+5. Em **Project Settings → API**, copie a *Project URL* e a chave *publishable* (ou *anon*).
+
+## Filmes (TMDB)
+
+Os filmes vêm do [TMDB](https://www.themoviedb.org). Crie uma conta, vá em
+**Configurações → API**, solicite uma chave (uso pessoal/educacional) e copie o
+**API Read Access Token**. Coloque-o em `TMDB_TOKEN`. Sem o token, o app usa só o
+catálogo local da tabela `movies`.
 
 ## Rodando o app
 

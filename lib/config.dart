@@ -15,6 +15,14 @@ class AppConfig {
     defaultValue: 'sb_publishable_T4n44fHZYJf-K4uk0NSOQw_E1mTl1nJ',
   );
 
+  /// "API Read Access Token" do TMDB (themoviedb.org → Configurações → API).
+  static const tmdbToken = String.fromEnvironment(
+    'TMDB_TOKEN',
+    defaultValue: '',
+  );
+
+  static bool get hasTmdb => tmdbToken.isNotEmpty;
+
   static bool get isConfigured =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 }
