@@ -12,7 +12,7 @@ class AppConfig {
   );
   static const supabaseAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: '',
+    defaultValue: 'sb_publishable_T4n44fHZYJf-K4uk0NSOQw_E1mTl1nJ',
   );
 
   static bool get isConfigured =>
