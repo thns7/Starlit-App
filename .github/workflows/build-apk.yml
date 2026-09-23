@@ -1,0 +1,43 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+
+      # Se os secrets SUPABASE_URL / SUPABASE_ANON_KEY existirem no repositório,
+      # eles têm prioridade sobre os valores padrão de lib/config.dart.
+      - name: Build APK
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          ARGS=""
+          if [ -n "$SUPABASE_URL" ]; then ARGS="$ARGS --dart-define=SUPABASE_URL=$SUPABASE_URL"; fi
+          if [ -n "$SUPABASE_ANON_KEY" ]; then ARGS="$ARGS --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"; fi
+          flutter build apk --release $ARGS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: starlit-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
