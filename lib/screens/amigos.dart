@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:starlitfilms/components/motion.dart';
 import 'package:starlitfilms/components/user_avatar.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
+import 'package:starlitfilms/models/message.dart';
 import 'package:starlitfilms/models/profile.dart';
 import 'package:starlitfilms/screens/biblioteca.dart';
 import 'package:starlitfilms/screens/conversas.dart';
+import 'package:starlitfilms/services/notification_center.dart';
 import 'package:starlitfilms/services/supabase_service.dart';
 import 'package:starlitfilms/theme/tokens.dart';
 
@@ -31,18 +34,31 @@ class _AmigosPageState extends State<AmigosPage> {
     _load();
   }
 
+  int _tab = 0; // 0 = conversas, 1 = amigos
+  List<Conversation> _conversas = [];
+  int _lastRevision = -1;
+
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final results = await Future.wait([
+      final results = await Future.wait<Object>([
         _service.fetchFriends(),
         _service.fetchIncomingRequests(),
+        // Se a migração do chat ainda não foi aplicada, a lista de amigos
+        // continua funcionando.
+        _service.listConversations().catchError((Object e) {
+          debugPrint('Conversas indisponíveis: $e');
+          return <Conversation>[];
+        }),
       ]);
       if (!mounted) return;
       setState(() {
-        _amigos = results[0]..sort((a, b) => a.displayName.compareTo(b.displayName));
-        _pedidos = results[1];
+        _amigos = (results[0] as List<Profile>)
+          ..sort((a, b) => a.displayName.compareTo(b.displayName));
+        _pedidos = results[1] as List<Profile>;
+        _conversas = results[2] as List<Conversation>;
       });
+      if (mounted) context.read<NotificationCenter>().refreshCounts();
     } catch (e) {
       if (mounted) setState(() => _error = friendlyError(e));
     } finally {
@@ -64,11 +80,12 @@ class _AmigosPageState extends State<AmigosPage> {
     }
   }
 
-  void _openChat(Profile amigo) {
-    Navigator.push(
+  Future<void> _openChat(Profile amigo) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ChatPage(amigo: amigo)),
     );
+    _load();
   }
 
   Future<void> _openProfile(Profile profile) async {
@@ -126,6 +143,13 @@ class _AmigosPageState extends State<AmigosPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Evento em tempo real (pedido, mensagem, aceite): recarrega a lista.
+    final revision = context.watch<NotificationCenter>().revision;
+    if (revision != _lastRevision) {
+      final first = _lastRevision == -1;
+      _lastRevision = revision;
+      if (!first) WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    }
     return Scaffold(
       backgroundColor: SC.bg,
       body: SkyBackground(
@@ -179,6 +203,20 @@ class _AmigosPageState extends State<AmigosPage> {
                   ),
                 ),
               ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(SSpace.page, 14, SSpace.page, 0),
+                  child: _Segmented(
+                    index: _tab,
+                    labels: const ['Conversas', 'Amigos'],
+                    badges: [
+                      _conversas.fold<int>(0, (a, c) => a + c.unread),
+                      _pedidos.length,
+                    ],
+                    onChanged: (i) => setState(() => _tab = i),
+                  ),
+                ),
+              ),
               if (_isLoading)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(SSpace.page, 16, SSpace.page, 0),
@@ -188,7 +226,36 @@ class _AmigosPageState extends State<AmigosPage> {
                     itemBuilder: (_, __) => const Skeleton(height: 72, radius: SRadius.lg),
                   ),
                 )
-              else ...[
+              else if (_tab == 0) ...[
+                if (_conversas.isEmpty)
+                  SliverToBoxAdapter(
+                    child: EmptyState(
+                      icon: Icons.forum_rounded,
+                      title: 'Nenhuma conversa ainda',
+                      message: _amigos.isEmpty
+                          ? 'Adicione amigos para começar a conversar.'
+                          : 'Escolha um amigo e mande um oi.',
+                      actionLabel: _amigos.isEmpty ? 'Encontrar pessoas' : null,
+                      onAction: _amigos.isEmpty ? _openSearch : null,
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.only(top: 10),
+                    sliver: SliverList.builder(
+                      itemCount: _conversas.length,
+                      itemBuilder: (context, i) => Entrance(
+                        key: ValueKey('conv${_conversas[i].friend.id}'),
+                        index: i,
+                        child: _ConversationRow(
+                          conversation: _conversas[i],
+                          myId: _service.currentUserId,
+                          onTap: () => _openChat(_conversas[i].friend),
+                        ),
+                      ),
+                    ),
+                  ),
+              ] else ...[
                 if (_error != null)
                   SliverToBoxAdapter(
                     child: EmptyState(
@@ -295,6 +362,219 @@ class _AmigosPageState extends State<AmigosPage> {
               child: Text('$count',
                   style: const TextStyle(
                       color: SC.starSoft, fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Controle segmentado com indicador deslizante e contadores.
+class _Segmented extends StatelessWidget {
+  final int index;
+  final List<String> labels;
+  final List<int> badges;
+  final ValueChanged<int> onChanged;
+
+  const _Segmented({
+    required this.index,
+    required this.labels,
+    required this.badges,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: SC.surface,
+        borderRadius: BorderRadius.circular(SRadius.md),
+        border: Border.all(color: SC.outline.withValues(alpha: 0.35)),
+      ),
+      child: Stack(
+        children: [
+          AnimatedAlign(
+            alignment: index == 0 ? Alignment.centerLeft : Alignment.centerRight,
+            duration: SMotion.of(context, const Duration(milliseconds: 260)),
+            curve: SMotion.easeInOut,
+            child: FractionallySizedBox(
+              widthFactor: 1 / labels.length,
+              heightFactor: 1,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: SC.buttonGradient,
+                  borderRadius: BorderRadius.circular(SRadius.sm),
+                ),
+              ),
+            ),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < labels.length; i++)
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    selected: i == index,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onChanged(i),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          AnimatedDefaultTextStyle(
+                            duration: SMotion.of(context, SMotion.quick),
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: i == index ? Colors.white : SC.textFaint,
+                            ),
+                            child: Text(labels[i]),
+                          ),
+                          if (badges[i] > 0) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF5A6E),
+                                borderRadius: BorderRadius.circular(SRadius.pill),
+                              ),
+                              child: Text('${badges[i]}',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _shortTime(DateTime? d) {
+  if (d == null) return '';
+  final t = d.toLocal();
+  final now = DateTime.now();
+  String two(int n) => n.toString().padLeft(2, '0');
+  if (t.year == now.year && t.month == now.month && t.day == now.day) {
+    return '${two(t.hour)}:${two(t.minute)}';
+  }
+  final yesterday = now.subtract(const Duration(days: 1));
+  if (t.year == yesterday.year && t.month == yesterday.month && t.day == yesterday.day) {
+    return 'Ontem';
+  }
+  return '${two(t.day)}/${two(t.month)}';
+}
+
+/// Linha da lista de conversas: último texto, horário e não lidas.
+class _ConversationRow extends StatelessWidget {
+  final Conversation conversation;
+  final String? myId;
+  final VoidCallback onTap;
+
+  const _ConversationRow({required this.conversation, required this.myId, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = conversation;
+    final mine = c.lastSenderId != null && c.lastSenderId == myId;
+    final unread = c.unread > 0;
+    return Pressable(
+      onTap: onTap,
+      pressedScale: 0.98,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: SSpace.page, vertical: 5),
+        padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+        decoration: BoxDecoration(
+          color: unread ? SC.surfaceHigh : SC.surface,
+          borderRadius: BorderRadius.circular(SRadius.lg),
+          border: Border.all(
+              color: unread ? SC.star.withValues(alpha: 0.5) : SC.outline.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            UserAvatar.of(c.friend, radius: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(c.friend.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: SC.text,
+                          fontSize: 15.5,
+                          fontWeight: unread ? FontWeight.w700 : FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      if (mine) ...[
+                        Icon(
+                          c.lastReadAt != null ? Icons.done_all_rounded : Icons.done_rounded,
+                          size: 15,
+                          color: c.lastReadAt != null ? SC.starSoft : SC.textFaint,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          c.lastContent ?? 'Toque para começar a conversa',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: unread ? SC.text : SC.textFaint,
+                            fontSize: 13.5,
+                            fontStyle: c.lastContent == null ? FontStyle.italic : null,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(_shortTime(c.lastAt),
+                    style: TextStyle(
+                        color: unread ? SC.starSoft : SC.textFaint,
+                        fontSize: 12,
+                        fontWeight: unread ? FontWeight.w600 : FontWeight.w400)),
+                const SizedBox(height: 6),
+                AnimatedScale(
+                  scale: unread ? 1 : 0,
+                  duration: SMotion.of(context, const Duration(milliseconds: 220)),
+                  curve: SMotion.easeOut,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 20),
+                    height: 20,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      gradient: SC.buttonGradient,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text('${c.unread}',
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

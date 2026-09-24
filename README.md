@@ -19,7 +19,8 @@
 - Filmes reais do TMDB: em cartaz, próximos lançamentos, em alta, busca e página de detalhes
 - Busca de reviews por filme
 - Amizades com pedido/aceite e busca de usuários
-- Chat em tempo real entre amigos (Supabase Realtime)
+- Chat com amigos: lista de conversas, não lidas, "visto", "digitando…" (Supabase Realtime)
+- Avisos em tempo real de pedidos de amizade, aceites e mensagens
 
 ## Backend (Supabase)
 
@@ -32,7 +33,8 @@ segurança (Row Level Security), bucket de avatares e um catálogo inicial de fi
    (ou use a CLI: `supabase link` + `supabase db push`).
 3. Em **Authentication → Sign In / Providers → Email**, decida se quer exigir confirmação de
    email. Com ela ligada, o usuário precisa clicar no link do email antes do primeiro login.
-4. Execute também `supabase/migrations/20260924000000_tmdb.sql` (integração com o TMDB).
+4. Execute também, em ordem, `supabase/migrations/20260924000000_tmdb.sql` (TMDB) e
+   `supabase/migrations/20260925000000_chat_notificacoes.sql` (chat e avisos em tempo real).
 5. Em **Project Settings → API**, copie a *Project URL* e a chave *publishable* (ou *anon*).
 
 ## Filmes (TMDB)

@@ -6,6 +6,7 @@ import 'package:starlitfilms/config.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
 import 'package:starlitfilms/screens/entrar.dart';
 import 'package:starlitfilms/screens/homepage.dart';
+import 'package:starlitfilms/services/notification_center.dart';
 import 'package:starlitfilms/theme/starlit_theme.dart';
 
 Future<void> main() async {
@@ -32,8 +33,11 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
+        ChangeNotifierProvider<NotificationCenter>(
+            create: (_) => NotificationCenter(), lazy: false),
       ],
       child: MaterialApp(
+        navigatorKey: appNavigatorKey,
         title: 'Starlit',
         theme: buildStarlitTheme(),
         themeMode: ThemeMode.dark,

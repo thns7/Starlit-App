@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:starlitfilms/models/message.dart';
 import 'package:starlitfilms/models/movie.dart';
@@ -11,14 +13,22 @@ class SupabaseService {
   SupabaseService._();
   static final SupabaseService instance = SupabaseService._();
 
-  SupabaseClient get _db => Supabase.instance.client;
+  /// Só para testes: cliente e usuário alternativos (ex.: banco local).
+  @visibleForTesting
+  static SupabaseClient? debugClient;
+  @visibleForTesting
+  static String? debugUserId;
 
-  String? get currentUserId => _db.auth.currentUser?.id;
+  SupabaseClient get _db => debugClient ?? Supabase.instance.client;
+
+  String? get currentUserId => debugUserId ?? _db.auth.currentUser?.id;
 
   static const _profileFields = 'id, username, name, bio, avatar_url';
+  // "!reviews_user_id_fkey": a review se liga a profiles pelo autor e também
+  // pelas curtidas (review_likes); sem isso o PostgREST não sabe qual usar.
   static final _reviewSelect = '''
     id, content, rating, is_public, created_at,
-    author:profiles($_profileFields),
+    author:profiles!reviews_user_id_fkey($_profileFields),
     movie:movies(${Movie.selectFields}),
     likes:review_likes(count),
     comments(count),
@@ -363,26 +373,86 @@ class SupabaseService {
 
   // ===================== Mensagens =====================
 
-  /// Mensagens entre o usuário atual e [otherUserId], em tempo real.
-  /// O RLS garante que só chegam mensagens das quais o usuário participa.
-  Stream<List<Message>> conversationStream(String otherUserId) {
+  /// Últimas mensagens trocadas com [otherUserId], da mais antiga para a mais nova.
+  Future<List<Message>> fetchConversation(String otherUserId, {int limit = 200}) async {
     final me = currentUserId!;
-    return _db
+    final data = await _db
         .from('messages')
-        .stream(primaryKey: ['id'])
-        .inFilter('sender_id', [me, otherUserId])
-        .order('created_at')
-        .map((rows) => rows
-            .map(Message.fromJson)
-            .where((m) =>
-                (m.senderId == me && m.receiverId == otherUserId) ||
-                (m.senderId == otherUserId && m.receiverId == me))
-            .toList());
+        .select()
+        .or('and(sender_id.eq.$me,receiver_id.eq.$otherUserId),'
+            'and(sender_id.eq.$otherUserId,receiver_id.eq.$me)')
+        .order('created_at', ascending: false)
+        .order('id', ascending: false)
+        .limit(limit);
+    return data.map(Message.fromJson).toList().reversed.toList();
   }
 
-  Future<void> sendMessage(String receiverId, String content) async {
-    await _db
+  /// Canal em tempo real do chat: mensagens novas do amigo e "visto" nas minhas.
+  RealtimeChannel subscribeConversation(
+    String otherUserId, {
+    required void Function(Message message) onChange,
+    required void Function(bool connected) onStatus,
+  }) {
+    final me = currentUserId!;
+    return _db
+        .channel('chat:$me:$otherUserId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'messages',
+          filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq, column: 'receiver_id', value: me),
+          callback: (p) {
+            final m = Message.fromJson(p.newRecord);
+            if (m.senderId == otherUserId) onChange(m);
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'messages',
+          filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq, column: 'sender_id', value: me),
+          callback: (p) {
+            final m = Message.fromJson(p.newRecord);
+            if (m.receiverId == otherUserId) onChange(m);
+          },
+        )
+        .subscribe((status, [error]) {
+      onStatus(status == RealtimeSubscribeStatus.subscribed);
+    });
+  }
+
+  Future<void> removeChannel(RealtimeChannel channel) => _db.removeChannel(channel);
+
+  Future<List<Conversation>> listConversations() async {
+    final data = await _db.rpc('list_conversations') as List;
+    return data
+        .map((j) => Conversation.fromJson(Map<String, dynamic>.from(j as Map)))
+        .toList();
+  }
+
+  Future<void> markConversationRead(String friendId) async {
+    await _db.rpc('mark_conversation_read', params: {'p_friend': friendId});
+  }
+
+  /// Total de mensagens recebidas ainda não lidas.
+  Future<int> countUnreadMessages() async {
+    final res = await _db
         .from('messages')
-        .insert({'receiver_id': receiverId, 'content': content.trim()});
+        .select('id')
+        .eq('receiver_id', currentUserId!)
+        .isFilter('read_at', null)
+        .count(CountOption.exact);
+    return res.count;
+  }
+
+  Future<Message> sendMessage(String receiverId, String content) async {
+    final data = await _db
+        .from('messages')
+        .insert({'receiver_id': receiverId, 'content': content.trim()})
+        .select()
+        .single();
+    return Message.fromJson(data);
   }
 }

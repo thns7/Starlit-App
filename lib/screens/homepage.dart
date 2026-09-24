@@ -16,6 +16,7 @@ import 'package:starlitfilms/screens/Perfil/perfil.dart';
 import 'package:starlitfilms/screens/amigos.dart';
 import 'package:starlitfilms/screens/filme.dart';
 import 'package:starlitfilms/screens/review.dart';
+import 'package:starlitfilms/services/notification_center.dart';
 import 'package:starlitfilms/services/supabase_service.dart';
 import 'package:starlitfilms/services/tmdb_service.dart';
 import 'package:starlitfilms/theme/tokens.dart';
@@ -51,6 +52,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     const pages = [_FeedTab(), Perfil(), AmigosPage()];
+    final badge = context.watch<NotificationCenter>().badge;
     return Scaffold(
       extendBody: true,
       backgroundColor: SC.bg,
@@ -64,10 +66,10 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: NotchNavBar(
         index: _index,
         onSelect: _select,
-        items: const [
-          NotchNavItem('assets/home_icon.png', 'Início', iconWidth: 24),
-          NotchNavItem('assets/perfil_icon.png', 'Perfil', iconWidth: 24),
-          NotchNavItem('assets/amigos_icon.png', 'Amigos', iconWidth: 34),
+        items: [
+          const NotchNavItem('assets/home_icon.png', 'Início', iconWidth: 24),
+          const NotchNavItem('assets/perfil_icon.png', 'Perfil', iconWidth: 24),
+          NotchNavItem('assets/amigos_icon.png', 'Amigos', iconWidth: 34, badge: badge),
         ],
       ),
     );

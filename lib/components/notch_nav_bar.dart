@@ -8,8 +8,63 @@ class NotchNavItem {
   final String asset;
   final double iconWidth;
   final String label;
+  final int badge;
 
-  const NotchNavItem(this.asset, this.label, {this.iconWidth = 24});
+  const NotchNavItem(this.asset, this.label, {this.iconWidth = 24, this.badge = 0});
+}
+
+/// Bolinha com contador; "pula" quando o número muda.
+class CountBadge extends StatelessWidget {
+  final int count;
+  final Widget child;
+
+  const CountBadge({super.key, required this.count, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        Positioned(
+          right: -10,
+          top: -8,
+          child: AnimatedSwitcher(
+            duration: SMotion.of(context, const Duration(milliseconds: 260)),
+            switchInCurve: SMotion.easeOut,
+            transitionBuilder: (c, a) => ScaleTransition(
+              scale: Tween(begin: 0.6, end: 1.0).animate(a),
+              child: FadeTransition(opacity: a, child: c),
+            ),
+            child: count <= 0
+                ? const SizedBox.shrink(key: ValueKey(0))
+                : Container(
+                    key: ValueKey(count),
+                    constraints: const BoxConstraints(minWidth: 18),
+                    height: 18,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF5A6E),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: NotchNavBar.barColor, width: 2),
+                    ),
+                    child: Text(
+                      count > 99 ? '99+' : '$count',
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Barra inferior com o "notch" do Starlit: um círculo flutuante que carrega o
@@ -132,7 +187,10 @@ class _NotchNavBarState extends State<NotchNavBar> with SingleTickerProviderStat
                           selected: i == widget.index,
                           label: widget.items[i].label,
                           onTap: () => widget.onSelect(i),
-                          child: _icon(widget.items[i]),
+                          child: CountBadge(
+                            count: widget.items[i].badge,
+                            child: _icon(widget.items[i]),
+                          ),
                         ),
                       ),
                     // Círculo flutuante com o ícone ativo.
@@ -168,7 +226,10 @@ class _NotchNavBarState extends State<NotchNavBar> with SingleTickerProviderStat
                               ),
                               child: KeyedSubtree(
                                 key: ValueKey(widget.index),
-                                child: _icon(widget.items[widget.index], scale: 1.1),
+                                child: CountBadge(
+                                  count: widget.items[widget.index].badge,
+                                  child: _icon(widget.items[widget.index], scale: 1.1),
+                                ),
                               ),
                             ),
                           ),
