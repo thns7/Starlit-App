@@ -6,6 +6,7 @@ import 'package:starlitfilms/config.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
 import 'package:starlitfilms/screens/entrar.dart';
 import 'package:starlitfilms/screens/homepage.dart';
+import 'package:starlitfilms/theme/starlit_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,13 +35,8 @@ class MyApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Starlit',
-        theme: ThemeData(
-          fontFamily: 'Poppins',
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xff7E56E4),
-            brightness: Brightness.dark,
-          ),
-        ),
+        theme: buildStarlitTheme(),
+        themeMode: ThemeMode.dark,
         debugShowCheckedModeBanner: false,
         initialRoute: '/',
         routes: {

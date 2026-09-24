@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:starlitfilms/components/motion.dart';
+import 'package:starlitfilms/components/review_card.dart';
 import 'package:starlitfilms/config.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
 import 'package:starlitfilms/models/movie.dart';
 import 'package:starlitfilms/services/supabase_service.dart';
 import 'package:starlitfilms/services/tmdb_service.dart';
+import 'package:starlitfilms/theme/tokens.dart';
 
-const _bg = Color(0xFF150B2E);
 
 /// Tela de busca de filme. Devolve o [Movie] salvo no banco via Navigator.pop.
 class MoviePickerPage extends StatefulWidget {
@@ -75,7 +77,7 @@ class _MoviePickerPageState extends State<MoviePickerPage> {
       if (!mounted) return;
       setState(() => _selecting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red),
+        SnackBar(content: Text(friendlyError(e)), backgroundColor: SC.danger),
       );
     }
   }
@@ -92,9 +94,9 @@ class _MoviePickerPageState extends State<MoviePickerPage> {
         bool saving = false;
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
-            backgroundColor: _bg,
+            backgroundColor: SC.bg,
             title: const Text('Adicionar filme',
-                style: TextStyle(color: Colors.white)),
+                style: TextStyle(color: SC.text)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -111,7 +113,7 @@ class _MoviePickerPageState extends State<MoviePickerPage> {
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('Cancelar',
-                    style: TextStyle(color: Colors.white70)),
+                    style: TextStyle(color: SC.textMuted)),
               ),
               TextButton(
                 onPressed: saving
@@ -135,12 +137,12 @@ class _MoviePickerPageState extends State<MoviePickerPage> {
                             content: Text(msg == 'Esse registro já existe.'
                                 ? 'Esse filme já está na lista.'
                                 : msg),
-                            backgroundColor: Colors.red,
+                            backgroundColor: SC.danger,
                           ));
                         }
                       },
                 child: const Text('Adicionar',
-                    style: TextStyle(color: Color(0xff7E56E4))),
+                    style: TextStyle(color: SC.starSoft)),
               ),
             ],
           ),
@@ -157,34 +159,19 @@ class _MoviePickerPageState extends State<MoviePickerPage> {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(color: SC.text),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: Colors.white70),
+          labelStyle: const TextStyle(color: SC.textMuted),
         ),
       ),
     );
   }
 
-  Widget _poster(String? url) {
-    const placeholder = SizedBox(
-      width: 46,
-      height: 69,
-      child: ColoredBox(
-        color: Color(0xFF3A267F),
-        child: Icon(Icons.movie, color: Colors.white38),
-      ),
-    );
-    if (url == null || url.isEmpty) return placeholder;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: Image.network(url,
-          width: 46,
-          height: 69,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => placeholder),
-    );
-  }
+  Widget _poster(String? url) => ClipRRect(
+        borderRadius: BorderRadius.circular(SRadius.sm),
+        child: SizedBox(width: 46, height: 69, child: PosterImage(url: url)),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -192,10 +179,10 @@ class _MoviePickerPageState extends State<MoviePickerPage> {
     final isEmpty = useTmdb ? _tmdbResults.isEmpty : _localResults.isEmpty;
 
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: SC.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2A1266),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: SC.surface,
+        shape: Border(bottom: BorderSide(color: SC.outline.withValues(alpha: 0.4))),
         title: TextField(
           controller: _controller,
           autofocus: true,
@@ -204,25 +191,30 @@ class _MoviePickerPageState extends State<MoviePickerPage> {
             _debounce?.cancel();
             _debounce = Timer(const Duration(milliseconds: 400), _search);
           },
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: SC.text),
           decoration: const InputDecoration(
             hintText: 'Buscar filme',
-            hintStyle: TextStyle(color: Colors.white54),
-            border: InputBorder.none,
+            prefixIcon: Icon(Icons.search_rounded),
+            isDense: true,
           ),
         ),
       ),
       body: Stack(
         children: [
           if (_loading && isEmpty)
-            const Center(child: CircularProgressIndicator())
+            ListView.separated(
+              padding: const EdgeInsets.all(SSpace.page),
+              itemCount: 6,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (_, __) => const Skeleton(height: 72),
+            )
           else if (_error != null)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(_error!,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70)),
+                    style: const TextStyle(color: SC.textMuted)),
               ),
             )
           else
@@ -232,49 +224,59 @@ class _MoviePickerPageState extends State<MoviePickerPage> {
                   const Padding(
                     padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
                     child: Text('Em alta nesta semana',
-                        style: TextStyle(color: Colors.white54)),
+                        style: TextStyle(color: SC.textFaint)),
                   ),
                 if (isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24),
                     child: Center(
                       child: Text('Nenhum filme encontrado.',
-                          style: TextStyle(color: Colors.white70)),
+                          style: TextStyle(color: SC.textMuted)),
                     ),
                   ),
                 if (useTmdb)
-                  ..._tmdbResults.map((m) => ListTile(
+                  for (final (i, m) in _tmdbResults.indexed)
+                    Entrance(
+                      key: ValueKey(m.tmdbId),
+                      index: i,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: SSpace.page, vertical: 4),
                         onTap: _selecting ? null : () => _selectTmdb(m),
                         leading: _poster(m.posterUrl),
                         title: Text(m.title,
-                            style: const TextStyle(color: Colors.white)),
+                            style: const TextStyle(
+                                color: SC.text, fontWeight: FontWeight.w600)),
                         subtitle: Text(
                           m.year?.toString() ?? 'Sem data',
-                          style: const TextStyle(color: Colors.white54),
+                          style: const TextStyle(color: SC.textFaint),
                         ),
-                      ))
+                        trailing: const Icon(Icons.add_circle_outline_rounded,
+                            color: SC.starSoft),
+                      ),
+                    )
                 else ...[
                   ..._localResults.map((m) => ListTile(
                         onTap: () => Navigator.of(context).pop(m),
                         leading: _poster(m.posterUrl),
                         title: Text(m.title,
-                            style: const TextStyle(color: Colors.white)),
+                            style: const TextStyle(color: SC.text)),
                         subtitle: Text(m.year?.toString() ?? '',
-                            style: const TextStyle(color: Colors.white54)),
+                            style: const TextStyle(color: SC.textFaint)),
                       )),
                   ListTile(
                     onTap: _addMovieManually,
                     leading: const Icon(Icons.add_circle,
-                        color: Color(0xff9670F5), size: 36),
+                        color: SC.star, size: 36),
                     title: const Text('Não encontrou? Adicionar filme',
-                        style: TextStyle(color: Color(0xff9670F5))),
+                        style: TextStyle(color: SC.star)),
                   ),
                 ],
               ],
             ),
           if (_selecting)
             const ColoredBox(
-              color: Colors.black45,
+              color: Color(0x88150B2E),
               child: Center(child: CircularProgressIndicator()),
             ),
         ],

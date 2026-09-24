@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:starlitfilms/components/motion.dart';
 import 'package:starlitfilms/screens/login.dart';
+import 'package:starlitfilms/theme/tokens.dart';
 import 'package:starlitfilms/screens/register.dart';
 
 class Entrar extends StatefulWidget {
@@ -70,7 +72,7 @@ class _EntrarState extends State<Entrar> with SingleTickerProviderStateMixin {
           child: Column(
             children: [
               Expanded(
-                flex: 3,
+                flex: 5,
                 child: SlideTransition(
                   position: _topAnimation,
                   child: Stack(
@@ -91,7 +93,7 @@ class _EntrarState extends State<Entrar> with SingleTickerProviderStateMixin {
                 ),
               ),
               Expanded(
-                flex: 2,
+                flex: 4,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 30.0),
                   child: FadeTransition(
@@ -99,7 +101,8 @@ class _EntrarState extends State<Entrar> with SingleTickerProviderStateMixin {
                     child: SlideTransition(
                       position: _contentAnimation,
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(0, 16, 0, 16),
+                        clipBehavior: Clip.none,
+                        padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.start,
                           children: [
@@ -110,85 +113,48 @@ class _EntrarState extends State<Entrar> with SingleTickerProviderStateMixin {
                             ),
                              const SizedBox(height: 16), // Espaço entre logo pequena e o texto
                           const Text(
-                            "Descubra o mundo do cinema: compartilhe suas opiniões e encontre novos filmes para amar!",
+                            "Descubra o mundo do cinema: compartilhe suas opiniões e encontre novos filmes para amar.",
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontFamily: 'Poppins',
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
+                              color: SC.textMuted,
+                              fontSize: 14.5,
+                              height: 1.5,
                             ),
                           ),
                           const SizedBox(height: 20), // Espaço entre o texto e o botão
-                            ElevatedButton(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  PageRouteBuilder(
-                                    pageBuilder: (context, animation, secondaryAnimation) => const Cadastro(),
-                                    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                      const begin = Offset(1.0, 0.0); // Começa da direita
-                                      const end = Offset.zero;
-                                      const curve = Curves.easeInOut;
-
-                                      var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                                      var offsetAnimation = animation.drive(tween);
-
-                                      return SlideTransition(
-                                        position: offsetAnimation,
-                                        child: child,
-                                      );
-                                    },
-                                    transitionDuration: const Duration(milliseconds: 500),
-                                  ),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF5936B2),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                              ),
-                              child: const Text(
-                                'Criar Conta',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 360),
+                              child: PrimaryButton(
+                                label: 'Criar conta',
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const Cadastro()),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 20),
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  PageRouteBuilder(
-                                    pageBuilder: (context, animation, secondaryAnimation) => const Login(),
-                                    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                      const begin = Offset(1.0, 0.0); // Começa da direita
-                                      const end = Offset.zero;
-                                      const curve = Curves.easeInOut;
-
-                                      var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                                      var offsetAnimation = animation.drive(tween);
-
-                                      return SlideTransition(
-                                        position: offsetAnimation,
-                                        child: child,
-                                      );
-                                    },
-                                    transitionDuration: const Duration(milliseconds: 500),
+                            const SizedBox(height: 12),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 360),
+                              child: Pressable(
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const Login()),
+                                ),
+                                semanticLabel: 'Já tenho conta',
+                                child: Container(
+                                  height: 52,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(SRadius.md),
+                                    border: Border.all(color: SC.starSoft.withValues(alpha: 0.6)),
                                   ),
-                                );
-                              },
-                              child: const Text(
-                                'LOGIN',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  color: Color(0XFF7E56E4),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                                  child: const Text(
+                                    'Já tenho conta',
+                                    style: TextStyle(
+                                      color: SC.text,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),

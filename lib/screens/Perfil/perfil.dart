@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:starlitfilms/components/motion.dart';
 import 'package:starlitfilms/components/new_review_sheet.dart';
 import 'package:starlitfilms/components/review_card.dart';
 import 'package:starlitfilms/components/user_avatar.dart';
@@ -9,6 +10,7 @@ import 'package:starlitfilms/models/review.dart';
 import 'package:starlitfilms/screens/Perfil/editar_perfil.dart';
 import 'package:starlitfilms/screens/review.dart';
 import 'package:starlitfilms/services/supabase_service.dart';
+import 'package:starlitfilms/theme/tokens.dart';
 
 class Perfil extends StatefulWidget {
   const Perfil({super.key});
@@ -74,7 +76,7 @@ class _PerfilState extends State<Perfil> with TickerProviderStateMixin {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: SC.danger),
         );
       }
     } finally {
@@ -97,7 +99,7 @@ class _PerfilState extends State<Perfil> with TickerProviderStateMixin {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: SC.danger),
         );
       }
     }
@@ -105,246 +107,297 @@ class _PerfilState extends State<Perfil> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final auth = Provider.of<AuthProvider>(context);
+    final name = (auth.nome?.isNotEmpty ?? false) ? auth.nome! : (auth.username ?? '');
 
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF2A1266), Color(0xFF150B2E)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.04),
-            child: Column(
-              children: [
-                SlideTransition(
+    return SkyBackground(
+      starCount: 40,
+      child: RefreshIndicator(
+        onRefresh: _load,
+        color: SC.star,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          slivers: [
+            SliverSafeArea(
+              bottom: false,
+              sliver: SliverToBoxAdapter(
+                child: SlideTransition(
                   position: _slideAnimation,
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.all(5),
-                    padding: const EdgeInsets.all(20),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF462F7E), Color(0xFF7E56E4)],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(SSpace.page, 12, SSpace.page, 0),
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+                      decoration: BoxDecoration(
+                        gradient: SC.heroGradient,
+                        borderRadius: BorderRadius.circular(SRadius.xl),
+                        boxShadow: SShadow.raised,
                       ),
-                      borderRadius: BorderRadius.all(Radius.circular(40)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            UserAvatar(url: authProvider.avatar, radius: 40),
-                            const Spacer(),
-                            _statColumn("Amigos", '$_friendCount'),
-                            _verticalDivider(),
-                            _statColumn("Posts", '${_reviews.length}'),
-                            _verticalDivider(),
-                            _statColumn("Likes", '$_likesReceived'),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          (authProvider.nome?.isNotEmpty ?? false)
-                              ? authProvider.nome!
-                              : (authProvider.username ?? ''),
-                          style: TextStyle(
-                            fontSize: screenWidth * 0.07,
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: const BoxDecoration(
+                                    shape: BoxShape.circle, color: Colors.white24),
+                                child: UserAvatar(url: auth.avatar, radius: 38),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.4,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    Text(
+                                      '@${auth.username ?? ''}',
+                                      style: const TextStyle(
+                                          fontSize: 14, color: Color(0xFFE6DCFF)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          '@${authProvider.username ?? ''}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white70,
-                          ),
-                        ),
-                        if (authProvider.descricao?.isNotEmpty ?? false) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            authProvider.descricao!,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontFamily: 'Poppins',
-                              color: Colors.white70,
+                          if (auth.descricao?.isNotEmpty ?? false) ...[
+                            const SizedBox(height: 14),
+                            Text(
+                              auth.descricao!,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 14, height: 1.45, color: Color(0xFFEDE6FF)),
                             ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
+                          ],
+                          const SizedBox(height: 18),
+                          Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0x33150B2E),
+                              borderRadius: BorderRadius.circular(SRadius.lg),
+                            ),
+                            child: Row(
+                              children: [
+                                _stat('Amigos', _friendCount),
+                                _divider(),
+                                _stat('Reviews', _reviews.length),
+                                _divider(),
+                                _stat('Curtidas', _likesReceived),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _pillButton(Icons.edit_rounded, 'Editar perfil', () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const EditarPerfil()),
+                                  );
+                                }),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _pillButton(Icons.ios_share_rounded, 'Compartilhar', () {
+                                  Clipboard.setData(ClipboardData(
+                                      text: 'Me siga no Starlit: @${auth.username}'));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Seu @ foi copiado')),
+                                  );
+                                }),
+                              ),
+                            ],
                           ),
                         ],
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _pillButton('Editar Perfil', () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (context) => const EditarPerfil()),
-                                );
-                              }),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _pillButton('Compartilhar Perfil', () {
-                                Clipboard.setData(ClipboardData(
-                                    text: 'Me siga no Starlit: @${authProvider.username}'));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Seu @ foi copiado!'),
-                                    backgroundColor: Color(0xff7E56E4),
-                                  ),
-                                );
-                              }),
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-                SizedBox(height: screenHeight * 0.015),
-                _tabSwitch(screenWidth, screenHeight),
-                SizedBox(height: screenHeight * 0.015),
-                if (isPostsSelected)
-                  SizedBox(
-                    width: screenWidth * 0.9,
-                    height: 44,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        if (await showNewReviewSheet(context)) _load();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xff7E56E4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        elevation: 10,
-                      ),
-                      child: const Text(
-                        'Novo Post',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                Expanded(child: _tabContent()),
-              ],
+              ),
             ),
-          ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(SSpace.page, 22, SSpace.page, 12),
+                child: Row(
+                  children: [
+                    Expanded(child: _tabSwitch()),
+                    if (isPostsSelected) ...[
+                      const SizedBox(width: 10),
+                      Tooltip(
+                        message: 'Nova review',
+                        child: Pressable(
+                          onTap: () async {
+                            if (await showNewReviewSheet(context)) _load();
+                          },
+                          child: Container(
+                            width: 46,
+                            height: 46,
+                            decoration: BoxDecoration(
+                              gradient: SC.buttonGradient,
+                              borderRadius: BorderRadius.circular(SRadius.md),
+                              boxShadow: SShadow.glowButton,
+                            ),
+                            child: const Icon(Icons.add_rounded, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            ..._tabContent(),
+            const SliverToBoxAdapter(child: SizedBox(height: 120)),
+          ],
         ),
       ),
     );
   }
 
-  Widget _tabContent() {
+  List<Widget> _tabContent() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return [
+        const SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: SSpace.page),
+          sliver: SliverToBoxAdapter(
+            child: Column(children: [
+              Skeleton(height: 104, radius: SRadius.lg),
+              SizedBox(height: 12),
+              Skeleton(height: 104, radius: SRadius.lg),
+            ]),
+          ),
+        ),
+      ];
     }
     final isEmpty = isPostsSelected ? _reviews.isEmpty : _comments.isEmpty;
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: isEmpty
-          ? ListView(
-              children: [
-                const SizedBox(height: 40),
-                Center(
-                  child: Text(
-                    isPostsSelected
-                        ? 'Você ainda não publicou nenhuma review.'
-                        : 'Você ainda não comentou nenhuma review.',
-                    style: const TextStyle(color: Colors.white54),
+    if (isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: EmptyState(
+            icon: isPostsSelected ? Icons.movie_filter_rounded : Icons.forum_rounded,
+            title: isPostsSelected
+                ? 'Você ainda não publicou reviews'
+                : 'Você ainda não comentou',
+            message: isPostsSelected
+                ? 'Conte o que achou do último filme que você viu.'
+                : 'Os comentários que você fizer aparecem aqui.',
+            actionLabel: isPostsSelected ? 'Escrever review' : null,
+            onAction: isPostsSelected
+                ? () async {
+                    if (await showNewReviewSheet(context)) _load();
+                  }
+                : null,
+          ),
+        ),
+      ];
+    }
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: SSpace.page),
+        sliver: SliverList.builder(
+          itemCount: isPostsSelected ? _reviews.length : _comments.length,
+          itemBuilder: (context, i) {
+            if (isPostsSelected) {
+              final review = _reviews[i];
+              return Entrance(
+                key: ValueKey('r${review.id}'),
+                index: i,
+                child: ReviewListTile(review: review, onTap: () => _openReview(review)),
+              );
+            }
+            final comment = _comments[i];
+            return Entrance(
+              key: ValueKey('c${comment.id}'),
+              index: i,
+              child: Pressable(
+                pressedScale: 0.98,
+                onTap: () => _openReviewById(comment.reviewId),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: SC.surface,
+                    borderRadius: BorderRadius.circular(SRadius.lg),
+                    border: Border.all(color: SC.outline.withValues(alpha: 0.35)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.movie_rounded, size: 14, color: SC.starSoft),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              comment.movieTitle ?? 'Review',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: SC.starSoft,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded,
+                              size: 18, color: SC.textFaint),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(comment.content,
+                          style: const TextStyle(color: SC.text, height: 1.45)),
+                    ],
                   ),
                 ),
-              ],
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.only(bottom: 120),
-              itemCount: isPostsSelected ? _reviews.length : _comments.length,
-              itemBuilder: (context, index) {
-                if (isPostsSelected) {
-                  final review = _reviews[index];
-                  return ReviewListTile(
-                      review: review, onTap: () => _openReview(review));
-                }
-                final comment = _comments[index];
-                return GestureDetector(
-                  onTap: () => _openReviewById(comment.reviewId),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3A267F),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Em: ${comment.movieTitle ?? 'review'}',
-                          style: const TextStyle(color: Colors.white54, fontSize: 12),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(comment.content,
-                            style: const TextStyle(color: Colors.white)),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
+              ),
+            );
+          },
+        ),
+      ),
+    ];
   }
 
-  Widget _tabSwitch(double screenWidth, double screenHeight) {
+  Widget _tabSwitch() {
+    final d = SMotion.of(context, SMotion.medium);
     return Container(
-      width: screenWidth * 0.8,
-      height: 48,
+      height: 46,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(40),
+        color: SC.surface,
+        borderRadius: BorderRadius.circular(SRadius.md),
+        border: Border.all(color: SC.outline.withValues(alpha: 0.35)),
       ),
       child: Stack(
         children: [
           AnimatedAlign(
-            alignment:
-                isPostsSelected ? Alignment.centerLeft : Alignment.centerRight,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            child: Container(
-              width: screenWidth * 0.4,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(40),
+            alignment: isPostsSelected ? Alignment.centerLeft : Alignment.centerRight,
+            duration: d,
+            curve: SMotion.emphasized,
+            child: FractionallySizedBox(
+              widthFactor: 0.5,
+              heightFactor: 1,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: SC.surfaceHigher,
+                  borderRadius: BorderRadius.circular(SRadius.sm),
+                ),
               ),
             ),
           ),
           Row(
             children: [
-              _tabLabel('Posts', true, screenWidth),
-              _tabLabel('Comentários', false, screenWidth),
+              _tabLabel('Reviews', true),
+              _tabLabel('Comentários', false),
             ],
           ),
         ],
@@ -352,20 +405,25 @@ class _PerfilState extends State<Perfil> with TickerProviderStateMixin {
     );
   }
 
-  Widget _tabLabel(String text, bool posts, double screenWidth) {
+  Widget _tabLabel(String text, bool posts) {
     final selected = isPostsSelected == posts;
     return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => isPostsSelected = posts),
-        child: Center(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: screenWidth * 0.045,
-              fontFamily: 'Poppins',
-              fontWeight: FontWeight.w500,
-              color: selected ? Colors.black : Colors.white,
+      child: Semantics(
+        selected: selected,
+        button: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => isPostsSelected = posts),
+          child: Center(
+            child: AnimatedDefaultTextStyle(
+              duration: SMotion.of(context, SMotion.quick),
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: selected ? SC.text : SC.textFaint,
+              ),
+              child: Text(text),
             ),
           ),
         ),
@@ -373,62 +431,58 @@ class _PerfilState extends State<Perfil> with TickerProviderStateMixin {
     );
   }
 
-  Widget _pillButton(String text, VoidCallback onPressed) {
-    return SizedBox(
-      height: 40,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xff9670F5),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-          elevation: 10,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+  Widget _pillButton(IconData icon, String text, VoidCallback onPressed) {
+    return Pressable(
+      onTap: onPressed,
+      semanticLabel: text,
+      child: Container(
+        height: 42,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(SRadius.md),
         ),
-        child: FittedBox(
-          child: Text(
-            text,
-            style: const TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 17, color: Colors.white),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 13.5, fontWeight: FontWeight.w600, color: Colors.white),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _statColumn(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 22,
-            fontFamily: 'Poppins',
-            fontWeight: FontWeight.bold,
+  Widget _stat(String label, int value) {
+    return Expanded(
+      child: Column(
+        children: [
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: value.toDouble()),
+            duration: SMotion.of(context, const Duration(milliseconds: 700)),
+            curve: SMotion.emphasized,
+            builder: (context, v, _) => Text(
+              v.round().toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
           ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 13,
-            fontFamily: 'Poppins',
-          ),
-        ),
-      ],
+          Text(label, style: const TextStyle(color: Color(0xFFE6DCFF), fontSize: 12)),
+        ],
+      ),
     );
   }
 
-  Widget _verticalDivider() {
-    return Container(
-      width: 1,
-      height: 40,
-      color: Colors.white70,
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-    );
-  }
+  Widget _divider() => Container(width: 1, height: 28, color: Colors.white24);
 }

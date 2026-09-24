@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starlitfilms/components/motion.dart';
 import 'package:starlitfilms/components/movie_carousel.dart';
 import 'package:starlitfilms/components/new_review_sheet.dart';
 import 'package:starlitfilms/components/review_card.dart';
@@ -8,12 +9,14 @@ import 'package:starlitfilms/models/review.dart';
 import 'package:starlitfilms/screens/review.dart';
 import 'package:starlitfilms/services/supabase_service.dart';
 import 'package:starlitfilms/services/tmdb_service.dart';
+import 'package:starlitfilms/theme/tokens.dart';
 
 /// Detalhes de um filme do TMDB + reviews da comunidade Starlit.
 class MovieDetailPage extends StatefulWidget {
   final TmdbMovie movie;
+  final String? heroTag;
 
-  const MovieDetailPage({super.key, required this.movie});
+  const MovieDetailPage({super.key, required this.movie, this.heroTag});
 
   @override
   State<MovieDetailPage> createState() => _MovieDetailPageState();
@@ -25,6 +28,7 @@ class _MovieDetailPageState extends State<MovieDetailPage> {
   Movie? _local;
   List<Review> _reviews = [];
   bool _loading = true;
+  bool _opening = false;
 
   @override
   void initState() {
@@ -39,9 +43,8 @@ class _MovieDetailPageState extends State<MovieDetailPage> {
         _service.findMovieByTmdbId(_movie.tmdbId),
       ]);
       final local = results[1] as Movie?;
-      final reviews = local == null
-          ? <Review>[]
-          : await _service.fetchMovieReviews(local.id);
+      final reviews =
+          local == null ? <Review>[] : await _service.fetchMovieReviews(local.id);
       if (!mounted) return;
       setState(() {
         _movie = results[0] as TmdbMovie;
@@ -49,167 +52,275 @@ class _MovieDetailPageState extends State<MovieDetailPage> {
         _reviews = reviews;
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(friendlyError(e)), backgroundColor: Colors.red),
-        );
-      }
+      _showError(e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  void _showError(Object e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(friendlyError(e)), backgroundColor: SC.danger),
+    );
+  }
+
   Future<void> _writeReview() async {
+    setState(() => _opening = true);
     try {
       final local = _local ?? await _service.ensureTmdbMovie(_movie);
       if (!mounted) return;
+      setState(() => _opening = false);
       if (await showNewReviewSheet(context, initialMovie: local)) _load();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(friendlyError(e)), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) setState(() => _opening = false);
+      _showError(e);
     }
   }
 
   double? get _starlitAverage {
     if (_reviews.isEmpty) return null;
-    return _reviews.map((r) => r.rating).reduce((a, b) => a + b) /
-        _reviews.length;
+    return _reviews.map((r) => r.rating).reduce((a, b) => a + b) / _reviews.length;
   }
 
   @override
   Widget build(BuildContext context) {
     final avg = _starlitAverage;
+    final width = MediaQuery.sizeOf(context).width;
+    const posterW = 118.0;
+
+    Widget poster = ClipRRect(
+      borderRadius: BorderRadius.circular(SRadius.md),
+      child: PosterImage(url: _movie.posterUrl),
+    );
+    poster = Hero(
+      tag: widget.heroTag ?? 'poster-detail-${_movie.tmdbId}',
+      child: poster,
+    );
+
     return Scaffold(
-      backgroundColor: const Color(0xFF150B2E),
+      backgroundColor: SC.bg,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        leading: Padding(
+          padding: const EdgeInsets.all(6),
+          child: IconButton.filledTonal(
+            style: IconButton.styleFrom(backgroundColor: SC.bg.withValues(alpha: 0.6)),
+            tooltip: 'Voltar',
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _writeReview,
-        backgroundColor: const Color(0xff7E56E4),
-        icon: const Icon(Icons.rate_review, color: Colors.white),
-        label: const Text('Escrever review',
-            style: TextStyle(color: Colors.white)),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(SSpace.page, 8, SSpace.page, 12),
+        child: PrimaryButton(
+          label: 'Escrever review',
+          icon: Icons.rate_review_rounded,
+          loading: _opening,
+          onPressed: _writeReview,
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: _load,
+        color: SC.star,
         child: ListView(
-          padding: const EdgeInsets.only(bottom: 100),
+          padding: EdgeInsets.zero,
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           children: [
             SizedBox(
-              height: 260,
-              child: MoviePosterBackground(
-                posterUrl: _movie.backdropUrl ?? _movie.posterUrl,
-                child: const SizedBox.shrink(),
-              ),
-            ),
-            Transform.translate(
-              offset: const Offset(0, -70),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    MoviePosterCard(movie: _movie, onTap: () {}, width: 110),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 36),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _movie.title,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold),
+              height: 300,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: MoviePosterBackground(
+                      posterUrl: _movie.backdropUrl ?? _movie.posterUrl,
+                      child: const SizedBox.shrink(),
+                    ),
+                  ),
+                  Positioned(
+                    left: SSpace.page,
+                    bottom: -60,
+                    width: posterW,
+                    height: posterW * 1.5,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(SRadius.md),
+                        boxShadow: SShadow.raised,
+                      ),
+                      child: poster,
+                    ),
+                  ),
+                  Positioned(
+                    left: SSpace.page + posterW + 16,
+                    right: SSpace.page,
+                    bottom: -54,
+                    child: Entrance(
+                      baseDelay: const Duration(milliseconds: 180),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _movie.title,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: SC.text,
+                              fontSize: width < 360 ? 19 : 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.4,
+                              height: 1.15,
                             ),
-                            if (_movie.releaseDate != null)
-                              Text(
-                                'Lançamento: ${formatDate(_movie.releaseDate!)}',
-                                style: const TextStyle(color: Colors.white70),
-                              ),
-                            const SizedBox(height: 6),
-                            if (_movie.voteAverage > 0)
-                              Text(
-                                  'TMDB ${_movie.voteAverage.toStringAsFixed(1)}/10',
-                                  style:
-                                      const TextStyle(color: Colors.white70)),
-                            if (avg != null)
-                              Row(
-                                children: [
-                                  StarRow(rating: avg.round(), size: 16),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '${avg.toStringAsFixed(1)} no Starlit',
-                                    style:
-                                        const TextStyle(color: Colors.white70),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              if (_movie.releaseDate != null)
+                                _Chip(Icons.calendar_today_rounded,
+                                    formatDate(_movie.releaseDate!)),
+                              if (_movie.voteAverage > 0)
+                                _Chip(Icons.star_rounded,
+                                    'TMDB ${_movie.voteAverage.toStringAsFixed(1)}',
+                                    iconColor: SC.gold),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            if (_movie.overview.isNotEmpty)
-              Transform.translate(
-                offset: const Offset(0, -50),
+            const SizedBox(height: 80),
+            if (avg != null)
+              Entrance(
+                index: 1,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    _movie.overview,
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 15, height: 1.4),
+                  padding: const EdgeInsets.fromLTRB(SSpace.page, 0, SSpace.page, 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: SC.surface,
+                      borderRadius: BorderRadius.circular(SRadius.lg),
+                      border: Border.all(color: SC.outline.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          avg.toStringAsFixed(1),
+                          style: const TextStyle(
+                              color: SC.text, fontSize: 28, fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              StarRow(rating: avg.round(), size: 18),
+                              Text(
+                                'Média de ${_reviews.length} ${_reviews.length == 1 ? 'review' : 'reviews'} no Starlit',
+                                style: const TextStyle(color: SC.textMuted, fontSize: 12.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text('Reviews no Starlit',
-                  style: TextStyle(color: Colors.white, fontSize: 18)),
-            ),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_reviews.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(
-                  child: Text(
-                      'Ninguém avaliou este filme ainda. Seja o primeiro!',
-                      style: TextStyle(color: Colors.white54)),
+            if (_movie.overview.isNotEmpty)
+              Entrance(
+                index: 2,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(SSpace.page, 12, SSpace.page, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Sinopse',
+                          style: TextStyle(
+                              color: SC.text, fontSize: 17, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      Text(
+                        _movie.overview,
+                        style: const TextStyle(color: SC.textMuted, fontSize: 14.5, height: 1.6),
+                      ),
+                    ],
+                  ),
                 ),
-              )
-            else
-              ..._reviews.map((r) => ReviewListTile(
-                    review: r,
-                    showAuthor: true,
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => ReviewDetailPage(review: r)),
-                      );
-                      _load();
-                    },
-                  )),
+              ),
+            const SectionHeader('Reviews no Starlit'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: SSpace.page),
+              child: _loading
+                  ? const Column(children: [
+                      Skeleton(height: 104, radius: SRadius.lg),
+                      SizedBox(height: 12),
+                      Skeleton(height: 104, radius: SRadius.lg),
+                    ])
+                  : _reviews.isEmpty
+                      ? const EmptyState(
+                          icon: Icons.auto_awesome_rounded,
+                          title: 'Ninguém avaliou este filme ainda',
+                          message: 'A primeira review é sua.',
+                        )
+                      : Column(
+                          children: [
+                            for (var i = 0; i < _reviews.length; i++)
+                              Entrance(
+                                index: i,
+                                child: ReviewListTile(
+                                  review: _reviews[i],
+                                  showAuthor: true,
+                                  onTap: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              ReviewDetailPage(review: _reviews[i])),
+                                    );
+                                    _load();
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
+            ),
+            const SizedBox(height: 24),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color iconColor;
+
+  const _Chip(this.icon, this.label, {this.iconColor = SC.starSoft});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: SC.surfaceHigh,
+        borderRadius: BorderRadius.circular(SRadius.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: iconColor),
+          const SizedBox(width: 5),
+          Text(label,
+              style: const TextStyle(
+                  color: SC.text, fontSize: 12, fontWeight: FontWeight.w500)),
+        ],
       ),
     );
   }
