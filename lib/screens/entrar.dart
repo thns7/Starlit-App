@@ -98,8 +98,8 @@ class _EntrarState extends State<Entrar> with SingleTickerProviderStateMixin {
                     opacity: _fadeAnimation,
                     child: SlideTransition(
                       position: _contentAnimation,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 30, 0, 0),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(0, 16, 0, 16),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.start,
                           children: [
@@ -108,7 +108,7 @@ class _EntrarState extends State<Entrar> with SingleTickerProviderStateMixin {
                               height: 50,
                               width: 50,
                             ),
-                             const SizedBox(height: 30), // Espaço entre logo pequena e o texto
+                             const SizedBox(height: 16), // Espaço entre logo pequena e o texto
                           const Text(
                             "Descubra o mundo do cinema: compartilhe suas opiniões e encontre novos filmes para amar!",
                             textAlign: TextAlign.center,

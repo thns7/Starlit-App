@@ -29,16 +29,17 @@ class _LoginState extends State<Login> {
             fit: BoxFit.cover,
           ),
         ),
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            const SizedBox(height: 100),
+            const SizedBox(height: 60),
             Image.asset(
               'assets/logoCompleta.png',
-              width: 330,
-              height: 330,
+              width: 280,
+              height: 280,
             ),
-            const SizedBox(height: 50),
+            const SizedBox(height: 30),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 30.0),
               child: Column(
@@ -165,6 +166,7 @@ class _LoginState extends State<Login> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

@@ -1,11 +1,11 @@
 {
-    "name": "starlitfilms",
-    "short_name": "starlitfilms",
+    "name": "Starlit",
+    "short_name": "Starlit",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#301870",
+    "theme_color": "#301870",
+    "description": "Compartilhe suas opiniões sobre filmes e descubra novos filmes para amar.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
@@ -31,5 +31,6 @@
             "type": "image/png",
             "purpose": "maskable"
         }
-    ]
+    ],
+    "lang": "pt-BR"
 }

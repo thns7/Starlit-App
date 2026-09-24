@@ -53,6 +53,12 @@ flutter run --dart-define-from-file=env.json
 O `env.json` não vai para o git. A chave publishable/anon é pública por natureza: quem
 protege os dados são as políticas de RLS do banco.
 
+## Versão web / iPhone
+
+A cada mudança na `main`, o workflow **Deploy Web** publica o app em
+<https://thns7.github.io/Starlit-App/>. No iPhone, abra o link no Safari →
+**Compartilhar → Adicionar à Tela de Início** para usar em tela cheia, como um app.
+
 Para gerar o APK de release:
 
 ```bash
