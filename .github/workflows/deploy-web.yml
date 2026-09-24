@@ -38,6 +38,9 @@ jobs:
           ARGS=""
           if [ -n "$TMDB_TOKEN" ]; then ARGS="--dart-define=TMDB_TOKEN=$TMDB_TOKEN"; else echo "::warning::TMDB_TOKEN não configurado: site sem filmes do TMDB"; fi
           flutter build web --release --no-web-resources-cdn --base-href "/${{ github.event.repository.name }}/" $ARGS
+          # Id da versão: força o navegador a baixar o app novo a cada publicação.
+          sed -i "s/__BUILD_ID__/${GITHUB_SHA::10}/" build/web/index.html
+          grep -q "${GITHUB_SHA::10}" build/web/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
