@@ -1,50 +1,130 @@
-// ignore_for_file: unused_local_variable
+import 'dart:async';
 
-import 'dart:ui';
 import 'package:animated_notch_bottom_bar/animated_notch_bottom_bar/animated_notch_bottom_bar.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:starlitfilms/components/review_form.dart';
+import 'package:starlitfilms/components/movie_carousel.dart';
+import 'package:starlitfilms/components/new_review_sheet.dart';
+import 'package:starlitfilms/config.dart';
+import 'package:starlitfilms/models/movie.dart';
+import 'package:starlitfilms/screens/filme.dart';
+import 'package:starlitfilms/services/tmdb_service.dart';
+import 'package:starlitfilms/components/review_card.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
+import 'package:starlitfilms/models/review.dart';
 import 'package:starlitfilms/screens/Perfil/perfil.dart';
 import 'package:starlitfilms/screens/amigos.dart';
 import 'package:starlitfilms/screens/review.dart';
+import 'package:starlitfilms/services/supabase_service.dart';
 
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
   @override
-  _HomePageState createState() => _HomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
-  late NotchBottomBarController _controller;
-  List<Review> userReviews = [];
-  // ignore: unused_field
-  final AuthProvider _authProvider = AuthProvider();
+  final _controller = NotchBottomBarController();
+  final _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
-  void _showReviewForm() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return ReviewForm(
-          onSubmit: (review) {
-            setState(() {
-              userReviews.add(review);
-            });
-          },
-        );
-      },
-    );
+  List<Review> _reviews = [];
+  bool _loading = true;
+  String? _error;
+
+  Future<List<TmdbMovie>>? _nowPlaying;
+  Future<List<TmdbMovie>>? _upcoming;
+  Future<List<TmdbMovie>>? _trending;
+  Future<List<TmdbMovie>>? _searchResults;
+
+  void _loadMovies() {
+    if (!AppConfig.hasTmdb) return;
+    final tmdb = TmdbService.instance;
+    _nowPlaying = tmdb.nowPlaying();
+    _upcoming = tmdb.upcoming();
+    _trending = tmdb.trending();
+  }
+
+  void _openMovie(TmdbMovie movie) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => MovieDetailPage(movie: movie)),
+    ).then((_) => _loadFeed());
   }
 
   @override
   void initState() {
     super.initState();
-    _controller = NotchBottomBarController(); 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<AuthProvider>(context, listen: false).fetchAllReviews();
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      if (auth.profile == null) auth.loadProfile();
     });
+    _loadMovies();
+    _loadFeed();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFeed() async {
+    setState(() {
+      _loading = _reviews.isEmpty;
+      _error = null;
+    });
+    try {
+      final reviews = await SupabaseService.instance
+          .fetchFeed(search: _searchController.text);
+      if (mounted) setState(() => _reviews = reviews);
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _onSearchChanged(String _) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      final q = _searchController.text.trim();
+      setState(() {
+        _searchResults = (AppConfig.hasTmdb && q.isNotEmpty)
+            ? TmdbService.instance.search(q)
+            : null;
+      });
+      _loadFeed();
+    });
+  }
+
+  Future<void> _refreshAll() async {
+    setState(_loadMovies);
+    await _loadFeed();
+  }
+
+  Future<void> _openReview(int index) async {
+    final updated = await Navigator.push<Review?>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ReviewDetailPage(review: _reviews[index]),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      if (updated == null) {
+        _reviews.removeAt(index);
+      } else {
+        _reviews[index] = updated;
+      }
+    });
+  }
+
+  Future<void> _newReview() async {
+    if (await showNewReviewSheet(context)) _loadFeed();
   }
 
   void _onItemTapped(int index) {
@@ -55,10 +135,8 @@ class _HomePageState extends State<HomePage> {
 
   Widget _getPage(int index) {
     switch (index) {
-      case 0:
-        return _homePageContent();
       case 1:
-        return const Perfil(); // Página de Perfil, onde AppBar será ocultada
+        return const Perfil();
       case 2:
         return const AmigosPage();
       default:
@@ -67,8 +145,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _homePageContent() {
-    final authProvider = Provider.of<AuthProvider>(context);
-
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -77,185 +153,171 @@ class _HomePageState extends State<HomePage> {
           end: Alignment.bottomRight,
         ),
       ),
-      child: SingleChildScrollView( // Permite rolagem
-        child: Column(
+      child: RefreshIndicator(
+        onRefresh: _refreshAll,
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: 120),
           children: [
             const SizedBox(height: 60),
-            const Text(
-              'StarlitFilms',
-              style: TextStyle(
-                fontFamily: "Poppins",
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w300,
-                letterSpacing: 1,
+            const Center(
+              child: Text(
+                'StarlitFilms',
+                style: TextStyle(
+                  fontFamily: "Poppins",
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w300,
+                  letterSpacing: 1,
+                ),
               ),
             ),
             const SizedBox(height: 30),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Column(
+              child: SizedBox(
+                height: 42,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  textInputAction: TextInputAction.search,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: const Color(0xFF35286D).withOpacity(0.5),
+                    prefixIcon: const Padding(
+                      padding: EdgeInsets.only(left: 10.0, right: 10.0),
+                      child: Icon(Icons.search, color: Colors.white),
+                    ),
+                    hintText: 'Buscar filme',
+                    hintStyle: const TextStyle(
+                      color: Colors.white,
+                      fontFamily: "Poppins",
+                      fontSize: 12,
+                      fontWeight: FontWeight.w300,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (_searchResults != null)
+              MovieCarousel(
+                title: 'Filmes encontrados',
+                future: _searchResults!,
+                onTap: _openMovie,
+              )
+            else if (_nowPlaying != null) ...[
+              MovieCarousel(
+                title: 'Em cartaz',
+                future: _nowPlaying!,
+                onTap: _openMovie,
+              ),
+              MovieCarousel(
+                title: 'Em breve',
+                future: _upcoming!,
+                onTap: _openMovie,
+                showReleaseDate: true,
+              ),
+              MovieCarousel(
+                title: 'Em alta na semana',
+                future: _trending!,
+                onTap: _openMovie,
+              ),
+            ],
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.only(left: 30, right: 20),
+              child: Row(
                 children: [
-                  SizedBox(
-                    width: 383,
-                    height: 42,
-                    child: TextField(
-                      style: const TextStyle(
+                  const Expanded(
+                    child: Text(
+                      'Reviews da comunidade',
+                      style: TextStyle(
+                        fontFamily: "Poppins",
                         color: Colors.white,
-                      ),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: const Color(0xFF35286D).withOpacity(0.5),
-                        prefixIcon: const Padding(
-                          padding: EdgeInsets.only(left: 10.0, right: 10.0),
-                          child: Icon(Icons.search, color: Colors.white),
-                        ),
-                        hintText: 'Choose a Movie',
-                        hintStyle: const TextStyle(
-                          color: Colors.white,
-                          fontFamily: "Poppins",
-                          fontSize: 12,
-                          fontWeight: FontWeight.w300,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w300,
                       ),
                     ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _newReview,
+                    icon: const Icon(Icons.add, color: Color(0xff9670F5)),
+                    label: const Text('Nova review',
+                        style: TextStyle(color: Color(0xff9670F5))),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 50),
-
-            // Título "Destaques"
-            const Align(
-              alignment: Alignment.topLeft,
-              child: Padding(
-                padding: EdgeInsets.only(left: 30),
-                child : Text(
-                  'Destaques',
-                  style: TextStyle(
-                    fontFamily: "Poppins",
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w300,
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(40),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null)
+              _message(_error!, action: 'Tentar novamente', onAction: _loadFeed)
+            else if (_reviews.isEmpty)
+              _message(
+                _searchController.text.isEmpty
+                    ? 'Ainda não há reviews. Que tal escrever a primeira?'
+                    : 'Nenhuma review encontrada para "${_searchController.text}".',
+                action: _searchController.text.isEmpty ? 'Escrever review' : null,
+                onAction: _newReview,
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: GridView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  shrinkWrap: true,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 0.7,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
+                  itemCount: _reviews.length,
+                  itemBuilder: (context, index) => ReviewCard(
+                    review: _reviews[index],
+                    onTap: () => _openReview(index),
                   ),
                 ),
               ),
-            ),
-
-            // Exibir as reviews em formato de grade
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0), 
-              child: GridView.builder(
-                physics: const NeverScrollableScrollPhysics(), 
-                shrinkWrap: true, 
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, 
-                  childAspectRatio: 0.7, 
-                  crossAxisSpacing: 10, 
-                  mainAxisSpacing: 10, 
-                ),
-                itemCount: authProvider.todasReviews.length,
-                itemBuilder: (context, index) {
-                  final review = authProvider.todasReviews[index]; 
-
-                  // Extrai as informações necessárias
-                  String reviewText = review['descricao'] ?? 'Sem descrição';
-                  List<String> words = reviewText.split(' ');
-                  String shortReviewText = words.take(5).join(' '); 
-                  String bannerFilme = review['bannerFilme'] ?? ''; 
-
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ReviewDetailPage(
-                            title: review['tituloFilme'] ?? 'Título Desconhecido',
-                            description: reviewText,
-                            rating: review['nota']?.toDouble() ?? 0.0,
-                          ),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        image: DecorationImage(
-                          image: NetworkImage(bannerFilme), 
-                          fit: BoxFit.cover, 
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.5), 
-                            spreadRadius: 2,
-                            blurRadius: 5,
-                            offset: const Offset(0, 3), 
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          color: Colors.black.withOpacity(0.7), // Fundo escuro cobrindo todo o banner
-                          child: Padding(
-                            padding: const EdgeInsets.all(12), 
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  review['tituloFilme'] ?? 'Sem título', 
-                                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 5),
-                                Row(
-                                  children: List.generate(5, (starIndex) {
-                                    return Icon(
-                                      starIndex < review['nota']?.round() ? Icons.star : Icons.star_border,
-                                      color: const Color(0xff9670F5),
-                                      size: 20,
-                                    );
-                                  }),
-                                ),
-                                const SizedBox(height: 5),
-                                Text(
-                                  shortReviewText, 
-                                  style: const TextStyle(color: Colors.white),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 150),
-                                Text(
-                                  'Autor: ${review['autorReview'] ?? 'Desconhecido'}', 
-                                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
           ],
         ),
       ),
     );
   }
 
+  Widget _message(String text, {String? action, VoidCallback? onAction}) {
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        children: [
+          Text(text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70)),
+          if (action != null) ...[
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: onAction,
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xff7E56E4)),
+              child: Text(action, style: const TextStyle(color: Colors.white)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: _selectedIndex == 1 
@@ -332,53 +394,6 @@ class _HomePageState extends State<HomePage> {
         showBlurBottomBar: false,
         kBottomRadius: 40,
         kIconSize: 24,
-      ),
-    );
-  }
-}
-
-
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
-
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  @override
-  void initState() {
-    super.initState();
-
-    // Ativar modo imersivo (esconde barra de status e navegação)
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
-
-    // Espera 2 segundos e navega para a tela de amigos
-    Future.delayed(const Duration(seconds: 2), () {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => const AmigosPage(), // Substitua pela sua tela de amigos
-        ),
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    // Voltar com as overlays normais
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Colors.purple, // Cor de fundo da splash screen
-      body: Center(
-        child: Text(
-          'Bem-vindo!',
-          style: TextStyle(color: Colors.white, fontSize: 24), // Texto de boas-vindas
-        ),
       ),
     );
   }

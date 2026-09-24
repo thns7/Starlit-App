@@ -1,122 +1,187 @@
-import 'package:flutter/material.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
-import 'amigos.dart';  // Verifique a importação
+import 'package:flutter/foundation.dart' as foundation;
+import 'package:flutter/material.dart';
+import 'package:starlitfilms/components/user_avatar.dart';
+import 'package:starlitfilms/controllers/authProvider.dart';
+import 'package:starlitfilms/models/message.dart';
+import 'package:starlitfilms/models/profile.dart';
+import 'package:starlitfilms/services/supabase_service.dart';
 
+/// Chat em tempo real com um amigo (Supabase Realtime).
 class ChatPage extends StatefulWidget {
-  final String nome;
-  final String fotoUrl;
-  final Amigo amigo;  // Agora o objeto Amigo é passado corretamente
+  final Profile amigo;
 
-  const ChatPage({
-    required this.nome,
-    required this.fotoUrl,
-    required this.amigo,  // O objeto amigo é passado
-    Key? key,
-  }) : super(key: key);
+  const ChatPage({super.key, required this.amigo});
 
   @override
-  _ChatPageState createState() => _ChatPageState();
+  State<ChatPage> createState() => _ChatPageState();
 }
 
 class _ChatPageState extends State<ChatPage> {
-  TextEditingController _messageController = TextEditingController();
+  final _service = SupabaseService.instance;
+  final _messageController = TextEditingController();
+  late final Stream<List<Message>> _stream =
+      _service.conversationStream(widget.amigo.id);
   bool _isEmojiVisible = false;
-  List<String> messages = [];
+  bool _sending = false;
 
-  // Função que lida com a seleção de emojis
-  void _onEmojiSelected(Emoji emoji) {
-    setState(() {
-      _messageController.text += emoji.emoji;  // Adiciona emoji ao campo de texto
-    });
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
   }
 
-  // Função de backspace para apagar o último caractere
-  void _onBackspacePressed() {
-    setState(() {
-      _messageController.text = _messageController.text.characters.skipLast(1).toString();  // Remove último caractere
-    });
-  }
-
-  // Função para enviar a mensagem
-  void _sendMessage() {
-    if (_messageController.text.isNotEmpty) {
-      setState(() {
-        messages.add(_messageController.text);  // Adiciona a mensagem na lista
-        _messageController.clear();  // Limpa o campo de texto
-      });
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await _service.sendMessage(widget.amigo.id, text);
+      _messageController.clear();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final me = _service.currentUserId;
     return Scaffold(
+      backgroundColor: const Color(0xFF150B2E),
       appBar: AppBar(
+        foregroundColor: Colors.white,
         title: Row(
           children: [
-            CircleAvatar(
-              backgroundImage: NetworkImage(widget.fotoUrl),
-            ),
+            UserAvatar.of(widget.amigo),
             const SizedBox(width: 10),
-            Text(widget.nome),
+            Expanded(
+              child: Text(widget.amigo.displayName, overflow: TextOverflow.ellipsis),
+            ),
           ],
         ),
-        backgroundColor: const Color.fromARGB(255, 99, 96, 248),
+        backgroundColor: const Color(0xFF5936B2),
       ),
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(messages[index]),  // Exibe as mensagens
+            child: StreamBuilder<List<Message>>(
+              stream: _stream,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(friendlyError(snapshot.error!),
+                        style: const TextStyle(color: Colors.white70)),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final messages = snapshot.data!.reversed.toList();
+                if (messages.isEmpty) {
+                  return const Center(
+                    child: Text('Diga oi! 👋', style: TextStyle(color: Colors.white54)),
+                  );
+                }
+                return ListView.builder(
+                  reverse: true,
+                  padding: const EdgeInsets.all(12),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final m = messages[index];
+                    final mine = m.senderId == me;
+                    final time = m.createdAt.toLocal();
+                    return Align(
+                      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.75),
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: mine ? const Color(0xff7E56E4) : const Color(0xFF3A267F),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(m.content,
+                                style: const TextStyle(color: Colors.white, fontSize: 15)),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+                              style: const TextStyle(color: Colors.white54, fontSize: 10),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
           ),
-          if (_isEmojiVisible)  // Exibe o seletor de emojis
-            SizedBox(
-              height: 250,
-              child: EmojiPicker(
-                onEmojiSelected: (category, emoji) {
-                  _onEmojiSelected(emoji);  // Seleciona emoji
-                },
-                config: const Config(
-                  columns: 7,  // Número de colunas no grid de emojis
-                  emojiSizeMax: 32 * (1.0),  // Tamanho do emoji
-                  verticalSpacing: 0,
-                  horizontalSpacing: 0,
-                  gridPadding: EdgeInsets.zero,
-                  initCategory: Category.RECENT,
-                ),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(_isEmojiVisible ? Icons.keyboard : Icons.emoji_emotions),
-                  onPressed: () {
-                    setState(() {
-                      _isEmojiVisible = !_isEmojiVisible;  // Alterna a visibilidade do emoji
-                    });
-                  },
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: const InputDecoration(
-                      hintText: 'Digite uma mensagem...',
-                      border: InputBorder.none,
+          SafeArea(
+            top: false,
+            child: Container(
+              color: const Color(0xFF2C2247),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      _isEmojiVisible ? Icons.keyboard : Icons.emoji_emotions,
+                      color: Colors.white70,
+                    ),
+                    onPressed: () {
+                      FocusScope.of(context).unfocus();
+                      setState(() => _isEmojiVisible = !_isEmojiVisible);
+                    },
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      minLines: 1,
+                      maxLines: 4,
+                      maxLength: 2000,
+                      onTap: () => setState(() => _isEmojiVisible = false),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        hintText: 'Digite uma mensagem...',
+                        hintStyle: TextStyle(color: Colors.white54),
+                        border: InputBorder.none,
+                        counterText: '',
+                      ),
                     ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: Color(0xff9670F5)),
+                    onPressed: _sending ? null : _sendMessage,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Offstage(
+            offstage: !_isEmojiVisible,
+            child: SizedBox(
+              height: 250,
+              child: EmojiPicker(
+                textEditingController: _messageController,
+                config: Config(
+                  height: 250,
+                  checkPlatformCompatibility: true,
+                  emojiViewConfig: EmojiViewConfig(
+                    emojiSizeMax: 28 *
+                        (foundation.defaultTargetPlatform == TargetPlatform.iOS ? 1.2 : 1.0),
+                  ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: _sendMessage,  // Envia a mensagem
-                ),
-              ],
+              ),
             ),
           ),
         ],

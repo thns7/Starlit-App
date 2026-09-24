@@ -1,25 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:starlitfilms/components/splashScreen/splash_screen.dart';
+import 'package:starlitfilms/config.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
-import 'package:starlitfilms/screens/biblioteca.dart'; 
 import 'package:starlitfilms/screens/entrar.dart';
 import 'package:starlitfilms/screens/homepage.dart';
-import 'package:starlitfilms/screens/amigos.dart'; 
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
-  final authToken = prefs.getString('authToken');
 
-  runApp(MyApp(isLoggedIn: authToken != null));
+  if (!AppConfig.isConfigured) {
+    runApp(const _MissingConfigApp());
+    return;
+  }
+
+  await Supabase.initialize(
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabaseAnonKey,
+  );
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  final bool isLoggedIn;
-
-  const MyApp({Key? key, required this.isLoggedIn}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -28,20 +33,47 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
       ],
       child: MaterialApp(
+        title: 'Starlit',
         theme: ThemeData(
-            fontFamily: 'Poppins',
-            
+          fontFamily: 'Poppins',
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xff7E56E4),
+            brightness: Brightness.dark,
           ),
+        ),
         debugShowCheckedModeBanner: false,
-        initialRoute: isLoggedIn ? '/home' : '/',
+        initialRoute: '/',
         routes: {
           '/': (context) => const SplashScreenIntro(),
           '/entrar': (context) => const Entrar(),
-          '/biblioteca': (context) => BibliotecaPage(amigo: ModalRoute.of(context)?.settings.arguments as Amigo),
-          '/home': (context) => HomePage(),
+          '/home': (context) => const HomePage(),
         },
       ),
     );
   }
 }
 
+class _MissingConfigApp extends StatelessWidget {
+  const _MissingConfigApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: Padding(
+          padding: EdgeInsets.all(24),
+          child: Center(
+            child: Text(
+              'Supabase não configurado.\n\n'
+              'Rode o app com:\n'
+              'flutter run --dart-define-from-file=env.json\n\n'
+              '(veja env.example.json e o README)',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

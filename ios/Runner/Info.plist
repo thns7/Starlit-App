@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O Starlit usa suas fotos para definir a imagem do seu perfil.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O Starlit usa a câmera para tirar a foto do seu perfil.</string>
 </dict>
 </plist>
