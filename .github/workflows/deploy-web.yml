@@ -31,10 +31,10 @@ jobs:
 
       - name: Build web
         env:
-          TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
+          TMDB_TOKEN: ${{ secrets.TMDB_TOKEN || vars.TMDB_TOKEN }}
         run: |
           ARGS=""
-          if [ -n "$TMDB_TOKEN" ]; then ARGS="--dart-define=TMDB_TOKEN=$TMDB_TOKEN"; fi
+          if [ -n "$TMDB_TOKEN" ]; then ARGS="--dart-define=TMDB_TOKEN=$TMDB_TOKEN"; else echo "::warning::TMDB_TOKEN não configurado: site sem filmes do TMDB"; fi
           flutter build web --release --no-web-resources-cdn --base-href "/${{ github.event.repository.name }}/" $ARGS
 
       - uses: actions/upload-pages-artifact@v3
