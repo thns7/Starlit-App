@@ -79,6 +79,12 @@ class SMotion {
   static const standard = Cubic(0.2, 0, 0, 1);
   static const exit = Cubic(0.3, 0, 1, 1);
 
+  /// Ease-out forte para UI (entradas, retorno de toque).
+  static const easeOut = Cubic(0.23, 1, 0.32, 1);
+
+  /// Ease-in-out forte para algo que se move de um ponto a outro na tela.
+  static const easeInOut = Cubic(0.77, 0, 0.175, 1);
+
   static const tap = Duration(milliseconds: 120);
   static const quick = Duration(milliseconds: 200);
   static const medium = Duration(milliseconds: 320);

@@ -210,6 +210,7 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
                         children: [
                           Hero(
                             tag: 'review-poster-${_review.id}',
+                            createRectTween: posterFlight,
                             child: PosterImage(url: _review.movie.posterUrl),
                           ),
                           const DecoratedBox(

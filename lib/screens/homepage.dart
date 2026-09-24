@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:starlitfilms/components/motion.dart';
 import 'package:starlitfilms/components/movie_carousel.dart';
 import 'package:starlitfilms/components/new_review_sheet.dart';
+import 'package:starlitfilms/components/notch_nav_bar.dart';
 import 'package:starlitfilms/components/review_card.dart';
 import 'package:starlitfilms/components/user_avatar.dart';
 import 'package:starlitfilms/config.dart';
@@ -60,7 +61,15 @@ class _HomePageState extends State<HomePage> {
               _TabLayer(active: i == _index, child: pages[i]),
         ],
       ),
-      bottomNavigationBar: StarlitNavBar(index: _index, onSelect: _select),
+      bottomNavigationBar: NotchNavBar(
+        index: _index,
+        onSelect: _select,
+        items: const [
+          NotchNavItem('assets/home_icon.png', 'Início', iconWidth: 24),
+          NotchNavItem('assets/perfil_icon.png', 'Perfil', iconWidth: 24),
+          NotchNavItem('assets/amigos_icon.png', 'Amigos', iconWidth: 34),
+        ],
+      ),
     );
   }
 }
@@ -74,7 +83,7 @@ class _TabLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final d = SMotion.of(context, SMotion.medium);
+    final d = SMotion.of(context, const Duration(milliseconds: 220));
     return IgnorePointer(
       ignoring: !active,
       child: TickerMode(
@@ -82,109 +91,13 @@ class _TabLayer extends StatelessWidget {
         child: AnimatedOpacity(
           opacity: active ? 1 : 0,
           duration: d,
-          curve: SMotion.standard,
+          curve: SMotion.easeOut,
           child: AnimatedScale(
             scale: active ? 1 : 0.985,
             duration: d,
-            curve: SMotion.emphasized,
+            curve: SMotion.easeOut,
             child: child,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Barra inferior flutuante com indicador que desliza até a aba ativa.
-class StarlitNavBar extends StatelessWidget {
-  final int index;
-  final ValueChanged<int> onSelect;
-
-  const StarlitNavBar({super.key, required this.index, required this.onSelect});
-
-  static const _items = [
-    (Icons.home_outlined, Icons.home_rounded, 'Início'),
-    (Icons.person_outline_rounded, Icons.person_rounded, 'Perfil'),
-    (Icons.people_outline_rounded, Icons.people_rounded, 'Amigos'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final d = SMotion.of(context, SMotion.medium);
-    return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      child: Container(
-        height: 64,
-        decoration: BoxDecoration(
-          color: SC.surface.withValues(alpha: 0.96),
-          borderRadius: BorderRadius.circular(SRadius.xl),
-          border: Border.all(color: SC.outline.withValues(alpha: 0.5)),
-          boxShadow: SShadow.raised,
-        ),
-        padding: const EdgeInsets.all(6),
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final w = c.maxWidth / _items.length;
-            return Stack(
-              children: [
-                AnimatedPositioned(
-                  duration: d,
-                  curve: SMotion.emphasized,
-                  left: w * index,
-                  top: 0,
-                  bottom: 0,
-                  width: w,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: SC.buttonGradient,
-                      borderRadius: BorderRadius.circular(SRadius.lg),
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    for (var i = 0; i < _items.length; i++)
-                      Expanded(
-                        child: Semantics(
-                          selected: i == index,
-                          button: true,
-                          label: _items[i].$3,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => onSelect(i),
-                            child: AnimatedDefaultTextStyle(
-                              duration: d,
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: i == index ? Colors.white : SC.textFaint,
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  AnimatedSwitcher(
-                                    duration: SMotion.of(context, SMotion.quick),
-                                    child: Icon(
-                                      i == index ? _items[i].$2 : _items[i].$1,
-                                      key: ValueKey(i == index),
-                                      color: i == index ? Colors.white : SC.textFaint,
-                                      size: 23,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  ExcludeSemantics(child: Text(_items[i].$3)),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            );
-          },
         ),
       ),
     );

@@ -127,6 +127,7 @@ class ReviewCard extends StatelessWidget {
                 children: [
                   Hero(
                     tag: 'review-poster-${review.id}',
+                    createRectTween: posterFlight,
                     child: PosterImage(url: review.movie.posterUrl),
                   ),
                   const DecoratedBox(

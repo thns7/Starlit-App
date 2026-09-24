@@ -95,6 +95,7 @@ class _MovieDetailPageState extends State<MovieDetailPage> {
     );
     poster = Hero(
       tag: widget.heroTag ?? 'poster-detail-${_movie.tmdbId}',
+      createRectTween: posterFlight,
       child: poster,
     );
 
@@ -134,9 +135,13 @@ class _MovieDetailPageState extends State<MovieDetailPage> {
                 clipBehavior: Clip.none,
                 children: [
                   Positioned.fill(
-                    child: MoviePosterBackground(
-                      posterUrl: _movie.backdropUrl ?? _movie.posterUrl,
-                      child: const SizedBox.shrink(),
+                    child: ClipRect(
+                      child: ArrivalZoom(
+                        child: MoviePosterBackground(
+                          posterUrl: _movie.backdropUrl ?? _movie.posterUrl,
+                          child: const SizedBox.shrink(),
+                        ),
+                      ),
                     ),
                   ),
                   Positioned(

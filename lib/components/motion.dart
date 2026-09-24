@@ -47,7 +47,7 @@ class _PressableState extends State<Pressable> {
         child: AnimatedScale(
           scale: _down ? widget.pressedScale : 1,
           duration: SMotion.of(context, SMotion.tap),
-          curve: SMotion.standard,
+          curve: SMotion.easeOut,
           child: widget.child,
         ),
       ),
@@ -67,7 +67,7 @@ class Entrance extends StatefulWidget {
     super.key,
     required this.child,
     this.index = 0,
-    this.offsetY = 18,
+    this.offsetY = 12,
     this.baseDelay = Duration.zero,
   });
 
@@ -76,10 +76,10 @@ class Entrance extends StatefulWidget {
 }
 
 class _EntranceState extends State<Entrance> with SingleTickerProviderStateMixin {
-  late final AnimationController _c =
-      AnimationController(vsync: this, duration: SMotion.page);
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 300));
   late final Animation<double> _t =
-      CurvedAnimation(parent: _c, curve: SMotion.emphasized);
+      CurvedAnimation(parent: _c, curve: SMotion.easeOut);
 
   @override
   void didChangeDependencies() {
@@ -89,9 +89,9 @@ class _EntranceState extends State<Entrance> with SingleTickerProviderStateMixin
       _c.value = 1;
       return;
     }
-    // Cascata limitada: no máximo ~6 passos de atraso.
+    // Cascata limitada: 40ms entre itens, no máximo 6 passos.
     final delay = widget.baseDelay +
-        Duration(milliseconds: 55 * math.min(widget.index, 6));
+        Duration(milliseconds: 40 * math.min(widget.index, 6));
     Future.delayed(delay, () {
       if (mounted) _c.forward();
     });
@@ -200,14 +200,14 @@ class LikeButton extends StatefulWidget {
 
 class _LikeButtonState extends State<LikeButton> with SingleTickerProviderStateMixin {
   late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 360));
 
   late final Animation<double> _scale = TweenSequence<double>([
     TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 1.35).chain(CurveTween(curve: Curves.easeOut)),
+        tween: Tween(begin: 1.0, end: 1.35).chain(CurveTween(curve: SMotion.easeOut)),
         weight: 35),
     TweenSequenceItem(
-        tween: Tween(begin: 1.35, end: 1.0).chain(CurveTween(curve: SMotion.emphasized)),
+        tween: Tween(begin: 1.35, end: 1.0).chain(CurveTween(curve: SMotion.easeOut)),
         weight: 65),
   ]).animate(_c);
 
@@ -483,6 +483,29 @@ class EmptyState extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Voo em arco para Heroes de pôster (em vez de linha reta).
+RectTween posterFlight(Rect? begin, Rect? end) =>
+    MaterialRectArcTween(begin: begin, end: end);
+
+/// Leve zoom de chegada (1.06 → 1) para imagens de destaque, uma vez por abertura.
+class ArrivalZoom extends StatelessWidget {
+  final Widget child;
+
+  const ArrivalZoom({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (SMotion.reduced(context)) return child;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 1.06, end: 1),
+      duration: const Duration(milliseconds: 700),
+      curve: SMotion.easeOut,
+      builder: (context, v, child) => Transform.scale(scale: v, child: child),
+      child: child,
     );
   }
 }

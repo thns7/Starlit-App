@@ -38,7 +38,9 @@ class MoviePosterCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(SRadius.md),
       child: PosterImage(url: movie.posterUrl),
     );
-    if (heroTag != null) poster = Hero(tag: heroTag!, child: poster);
+    if (heroTag != null) {
+      poster = Hero(tag: heroTag!, createRectTween: posterFlight, child: poster);
+    }
 
     return Pressable(
       onTap: onTap,
