@@ -54,9 +54,7 @@ class _AmigosPageState extends State<AmigosPage> {
     try {
       await action();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(success)),
-      );
+      showStarlitToast(context, success, icon: Icons.people_alt_rounded);
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -418,9 +416,14 @@ class _BuscarUsuariosPageState extends State<BuscarUsuariosPage> {
       switch (_status[p.id]) {
         case null:
           await _service.sendFriendRequest(p.id);
+          if (mounted) showStarlitToast(context, 'Pedido enviado para @${p.username}');
           break;
         case 'received':
           await _service.acceptFriendRequest(p.id);
+          if (mounted) {
+            showStarlitToast(context, 'Agora você e @${p.username} são amigos',
+                icon: Icons.people_alt_rounded);
+          }
           break;
         case 'sent':
           await _service.removeFriendship(p.id);

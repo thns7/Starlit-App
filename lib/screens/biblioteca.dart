@@ -65,9 +65,13 @@ class _BibliotecaPageState extends State<BibliotecaPage> {
       switch (_status) {
         case null:
           await _service.sendFriendRequest(widget.userId);
+          if (mounted) showStarlitToast(context, 'Pedido de amizade enviado');
           break;
         case 'received':
           await _service.acceptFriendRequest(widget.userId);
+          if (mounted) {
+            showStarlitToast(context, 'Vocês agora são amigos', icon: Icons.people_alt_rounded);
+          }
           break;
         default:
           await _service.removeFriendship(widget.userId);

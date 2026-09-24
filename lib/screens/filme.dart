@@ -130,7 +130,8 @@ class _MovieDetailPageState extends State<MovieDetailPage> {
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           children: [
             SizedBox(
-              height: 300,
+              // Backdrop em 16:9: aparece inteiro, sem cortar as laterais.
+              height: width * 9 / 16 + MediaQuery.paddingOf(context).top + 24,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [

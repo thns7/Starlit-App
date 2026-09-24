@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:starlitfilms/components/motion.dart';
 import 'package:starlitfilms/components/movie_picker.dart';
 import 'package:starlitfilms/components/review_card.dart';
@@ -51,6 +52,16 @@ class _NewReviewSheetState extends State<NewReviewSheet> {
     );
   }
 
+  final _maxBurst = GlobalKey<StarBurstState>();
+
+  void _rate(int value) {
+    HapticFeedback.selectionClick();
+    setState(() => _rating = value);
+    if (value == 5 && !SMotion.reduced(context)) {
+      Future.delayed(const Duration(milliseconds: 200), () => _maxBurst.currentState?.fire());
+    }
+  }
+
   Future<void> _pickMovie() async {
     final movie = await Navigator.push<Movie>(
       context,
@@ -80,7 +91,9 @@ class _NewReviewSheetState extends State<NewReviewSheet> {
         rating: _rating,
         isPublic: _isPublic,
       );
-      if (mounted) Navigator.of(context).pop(true);
+      if (!mounted) return;
+      showStarlitToast(context, 'Review publicada!', icon: Icons.auto_awesome_rounded);
+      Navigator.of(context).pop(true);
     } catch (e) {
       _showError(friendlyError(e));
       if (mounted) setState(() => _saving = false);
@@ -189,19 +202,14 @@ class _NewReviewSheetState extends State<NewReviewSheet> {
                     button: true,
                     label: '${index + 1} estrelas',
                     child: GestureDetector(
-                      onTap: () => setState(() => _rating = index + 1),
+                      onTap: () => _rate(index + 1),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: AnimatedScale(
-                          scale: on ? 1.08 : 1,
-                          duration: SMotion.of(
-                              context, Duration(milliseconds: 180 + index * 40)),
-                          curve: SMotion.emphasized,
-                          child: Icon(
-                            on ? Icons.star_rounded : Icons.star_outline_rounded,
-                            color: on ? SC.gold : SC.textFaint,
-                            size: 40,
-                          ),
+                        child: _PopStar(
+                          on: on,
+                          // Cascata: as estrelas acendem da esquerda para a direita.
+                          delay: Duration(milliseconds: 45 * index),
+                          burst: index == 4 ? _maxBurst : null,
                         ),
                       ),
                     ),
@@ -325,5 +333,64 @@ class _VisibilityToggle extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Estrela da nota: ao acender, "pula" (escala 1 → 1.3 → 1) com leve atraso
+/// em cascata; ao apagar, volta sem pulo.
+class _PopStar extends StatefulWidget {
+  final bool on;
+  final Duration delay;
+  final GlobalKey<StarBurstState>? burst;
+
+  const _PopStar({required this.on, required this.delay, this.burst});
+
+  @override
+  State<_PopStar> createState() => _PopStarState();
+}
+
+class _PopStarState extends State<_PopStar> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 320));
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.3).chain(CurveTween(curve: SMotion.easeOut)), weight: 40),
+    TweenSequenceItem(
+        tween: Tween(begin: 1.3, end: 1.0).chain(CurveTween(curve: SMotion.easeOut)), weight: 60),
+  ]).animate(_c);
+
+  @override
+  void didUpdateWidget(_PopStar old) {
+    super.didUpdateWidget(old);
+    if (!old.on && widget.on && !SMotion.reduced(context)) {
+      Future.delayed(widget.delay, () {
+        if (mounted) _c.forward(from: 0);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final star = ScaleTransition(
+      scale: _scale,
+      child: AnimatedSwitcher(
+        duration: SMotion.of(context, const Duration(milliseconds: 160)),
+        child: Icon(
+          widget.on ? Icons.star_rounded : Icons.star_outline_rounded,
+          key: ValueKey(widget.on),
+          color: widget.on ? SC.gold : SC.textFaint,
+          size: 40,
+        ),
+      ),
+    );
+    return widget.burst == null
+        ? star
+        : StarBurst(key: widget.burst, radius: 34, color: SC.gold, child: star);
   }
 }

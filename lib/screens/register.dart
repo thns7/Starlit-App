@@ -45,13 +45,7 @@ class _CadastroState extends State<Cadastro> {
       backgroundColor: SC.bg,
       extendBodyBehindAppBar: true,
       appBar: AppBar(),
-      body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/fundoLogin.png'),
-            fit: BoxFit.cover,
-          ),
-        ),
+      body: SkyBackground(
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(

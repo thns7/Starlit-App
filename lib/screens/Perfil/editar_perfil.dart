@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:starlitfilms/components/motion.dart';
 import 'package:starlitfilms/components/user_avatar.dart';
+import 'package:starlitfilms/components/wave_header.dart';
 import 'package:starlitfilms/controllers/authProvider.dart';
 import 'package:starlitfilms/screens/entrar.dart';
 import 'package:starlitfilms/theme/tokens.dart';
@@ -96,6 +97,7 @@ class _EditarPerfilState extends State<EditarPerfil> with TickerProviderStateMix
           child: Column(
             children: [
               SizedBox(
+                width: double.infinity,
                 height: 300,
                 child: Stack(
                   alignment: Alignment.bottomCenter,
@@ -104,13 +106,10 @@ class _EditarPerfilState extends State<EditarPerfil> with TickerProviderStateMix
                       top: 0,
                       left: 0,
                       right: 0,
+                      height: 230,
                       child: SlideTransition(
                         position: _imageAnimation,
-                        child: Image.asset(
-                          'assets/detalheEditarPerfil.png',
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                        ),
+                        child: const WaveHeader(waveHeight: 56, secondLayer: true),
                       ),
                     ),
                     GestureDetector(
@@ -221,11 +220,7 @@ class _EditarPerfilState extends State<EditarPerfil> with TickerProviderStateMix
       );
       if (!mounted) return;
       setState(() => _newAvatarBytes = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Alterações salvas com sucesso!'),
-                  ),
-      );
+      showStarlitToast(context, 'Perfil atualizado', icon: Icons.person_rounded);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

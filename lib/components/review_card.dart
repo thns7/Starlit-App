@@ -120,8 +120,8 @@ class ReviewCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              flex: 11,
+            AspectRatio(
+              aspectRatio: 2 / 3,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -167,7 +167,6 @@ class ReviewCard extends StatelessWidget {
               ),
             ),
             Expanded(
-              flex: 7,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 child: Column(
@@ -176,7 +175,7 @@ class ReviewCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         review.content,
-                        maxLines: 3,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             color: SC.textMuted, fontSize: 12.5, height: 1.4),
@@ -229,18 +228,26 @@ class ReviewGridSkeleton extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       shrinkWrap: true,
       itemCount: 4,
-      gridDelegate: reviewGridDelegate,
+      gridDelegate: reviewGridDelegate(MediaQuery.sizeOf(context).width),
       itemBuilder: (_, __) => const Skeleton(radius: SRadius.lg),
     );
   }
 }
 
-const reviewGridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
-  crossAxisCount: 2,
-  childAspectRatio: 0.56,
-  crossAxisSpacing: 14,
-  mainAxisSpacing: 14,
-);
+/// Grade de 2 colunas em que o pôster fica sempre em 2:3 (sem cortes) e
+/// sobra uma faixa fixa para o texto do card.
+SliverGridDelegate reviewGridDelegate(double screenWidth) {
+  const spacing = 14.0;
+  const textBlock = 86.0;
+  final columns = screenWidth >= 700 ? 3 : 2;
+  final cardWidth = (screenWidth - SSpace.page * 2 - spacing * (columns - 1)) / columns;
+  return SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: columns,
+    mainAxisExtent: cardWidth * 1.5 + textBlock,
+    crossAxisSpacing: spacing,
+    mainAxisSpacing: spacing,
+  );
+}
 
 /// Item de lista (perfil, página do filme).
 class ReviewListTile extends StatelessWidget {

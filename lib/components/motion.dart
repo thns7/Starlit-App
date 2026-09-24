@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:starlitfilms/theme/tokens.dart';
 
 /// Resposta tátil: encolhe levemente enquanto pressionado.
@@ -211,11 +212,17 @@ class _LikeButtonState extends State<LikeButton> with SingleTickerProviderStateM
         weight: 65),
   ]).animate(_c);
 
+  final _burst = GlobalKey<StarBurstState>();
+
   @override
   void didUpdateWidget(LikeButton old) {
     super.didUpdateWidget(old);
-    if (!old.liked && widget.liked && !SMotion.reduced(context)) {
-      _c.forward(from: 0);
+    if (!old.liked && widget.liked) {
+      HapticFeedback.lightImpact();
+      if (!SMotion.reduced(context)) {
+        _c.forward(from: 0);
+        _burst.currentState?.fire();
+      }
     }
   }
 
@@ -235,7 +242,9 @@ class _LikeButtonState extends State<LikeButton> with SingleTickerProviderStateM
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ScaleTransition(
+            StarBurst(
+              key: _burst,
+              child: ScaleTransition(
               scale: _scale,
               child: AnimatedSwitcher(
                 duration: SMotion.of(context, SMotion.quick),
@@ -247,6 +256,7 @@ class _LikeButtonState extends State<LikeButton> with SingleTickerProviderStateM
                   size: widget.size,
                 ),
               ),
+            ),
             ),
             const SizedBox(width: 6),
             AnimatedSwitcher(
@@ -506,6 +516,288 @@ class ArrivalZoom extends StatelessWidget {
       curve: SMotion.easeOut,
       builder: (context, v, child) => Transform.scale(scale: v, child: child),
       child: child,
+    );
+  }
+}
+
+/// Pequena explosão de estrelinhas ao redor do filho (curtir, dar nota máxima).
+/// Chame `fire()` pela GlobalKey<StarBurstState>.
+class StarBurst extends StatefulWidget {
+  final Widget child;
+  final int count;
+  final double radius;
+  final Color color;
+
+  const StarBurst({
+    super.key,
+    required this.child,
+    this.count = 7,
+    this.radius = 26,
+    this.color = SC.starSoft,
+  });
+
+  @override
+  State<StarBurst> createState() => StarBurstState();
+}
+
+class StarBurstState extends State<StarBurst> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 520));
+
+  void fire() => _c.forward(from: 0);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        widget.child,
+        IgnorePointer(
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (context, _) {
+              if (_c.value == 0 || _c.value == 1) return const SizedBox.shrink();
+              final t = SMotion.easeOut.transform(_c.value);
+              final fade = 1 - Curves.easeIn.transform(_c.value);
+              return SizedBox(
+                width: 0,
+                height: 0,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    for (var i = 0; i < widget.count; i++)
+                      Builder(builder: (context) {
+                        final a = (i / widget.count) * 2 * math.pi - math.pi / 2;
+                        final d = widget.radius * (0.35 + 0.65 * t) * (i.isEven ? 1 : 0.8);
+                        final size = (i.isEven ? 9.0 : 6.0) * (1 - 0.3 * t);
+                        return Positioned(
+                          left: math.cos(a) * d - size / 2,
+                          top: math.sin(a) * d - size / 2,
+                          child: Opacity(
+                            opacity: fade.clamp(0, 1),
+                            child: Transform.rotate(
+                              angle: t * math.pi,
+                              child: Icon(Icons.star_rounded,
+                                  size: size, color: i.isEven ? widget.color : SC.gold),
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Toque duplo para curtir: mostra um coração grande que "estoura" no centro.
+class DoubleTapLike extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onDoubleTap;
+
+  const DoubleTapLike({super.key, required this.child, required this.onDoubleTap});
+
+  @override
+  State<DoubleTapLike> createState() => _DoubleTapLikeState();
+}
+
+class _DoubleTapLikeState extends State<DoubleTapLike> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(
+        tween: Tween(begin: 0.6, end: 1.15).chain(CurveTween(curve: SMotion.easeOut)), weight: 30),
+    TweenSequenceItem(tween: Tween(begin: 1.15, end: 1.0), weight: 15),
+    TweenSequenceItem(tween: ConstantTween(1.0), weight: 30),
+    TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.25).chain(CurveTween(curve: Curves.easeIn)), weight: 25),
+  ]).animate(_c);
+
+  late final Animation<double> _opacity = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 20),
+    TweenSequenceItem(tween: ConstantTween(1.0), weight: 55),
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 25),
+  ]).animate(_c);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _handle() {
+    HapticFeedback.mediumImpact();
+    widget.onDoubleTap();
+    if (!SMotion.reduced(context)) _c.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onDoubleTap: _handle,
+      child: Stack(
+        fit: StackFit.passthrough,
+        alignment: Alignment.center,
+        children: [
+          widget.child,
+          IgnorePointer(
+            child: AnimatedBuilder(
+              animation: _c,
+              builder: (context, _) => _c.value == 0 || _c.value == 1
+                  ? const SizedBox.shrink()
+                  : Opacity(
+                      opacity: _opacity.value,
+                      child: Transform.scale(
+                        scale: _scale.value,
+                        child: const Icon(
+                          Icons.favorite_rounded,
+                          size: 96,
+                          color: Colors.white,
+                          shadows: [Shadow(color: Color(0x99150B2E), blurRadius: 24)],
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Aviso de sucesso que desce do topo (entrada 280ms ease-out, saída 180ms ease-in).
+void showStarlitToast(BuildContext context, String message,
+    {IconData icon = Icons.check_circle_rounded}) {
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null) return;
+  late OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (_) => _Toast(message: message, icon: icon, onDone: () => entry.remove()),
+  );
+  overlay.insert(entry);
+}
+
+class _Toast extends StatefulWidget {
+  final String message;
+  final IconData icon;
+  final VoidCallback onDone;
+
+  const _Toast({required this.message, required this.icon, required this.onDone});
+
+  @override
+  State<_Toast> createState() => _ToastState();
+}
+
+class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 280),
+    reverseDuration: const Duration(milliseconds: 180),
+  );
+  late final Animation<double> _t = CurvedAnimation(
+    parent: _c,
+    curve: SMotion.easeOut,
+    reverseCurve: Curves.easeIn,
+  );
+  final _burst = GlobalKey<StarBurstState>();
+
+  @override
+  void initState() {
+    super.initState();
+    HapticFeedback.lightImpact();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (SMotion.reduced(context)) {
+        _c.value = 1;
+      } else {
+        await _c.forward();
+        _burst.currentState?.fire();
+      }
+      await Future.delayed(const Duration(milliseconds: 2200));
+      if (!mounted) return;
+      if (SMotion.reduced(context)) {
+        widget.onDone();
+      } else {
+        await _c.reverse();
+        widget.onDone();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top + 10;
+    return Positioned(
+      top: top,
+      left: 16,
+      right: 16,
+      child: IgnorePointer(
+        child: AnimatedBuilder(
+          animation: _t,
+          builder: (context, child) => Opacity(
+            opacity: _t.value.clamp(0, 1),
+            child: FractionalTranslation(
+              translation: Offset(0, -0.6 * (1 - _t.value)),
+              child: Transform.scale(scale: 0.96 + 0.04 * _t.value, child: child),
+            ),
+          ),
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 12, 18, 12),
+                decoration: BoxDecoration(
+                  color: SC.surfaceHigher,
+                  borderRadius: BorderRadius.circular(SRadius.pill),
+                  border: Border.all(color: SC.star.withValues(alpha: 0.5)),
+                  boxShadow: SShadow.raised,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    StarBurst(
+                      key: _burst,
+                      radius: 20,
+                      child: Icon(widget.icon, color: SC.starSoft, size: 22),
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        widget.message,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          color: SC.text,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

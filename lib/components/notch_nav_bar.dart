@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:starlitfilms/theme/tokens.dart';
 
 class NotchNavItem {
@@ -219,7 +220,10 @@ class _BarSlotState extends State<_BarSlot> {
         onTapDown: (_) => setState(() => _down = true),
         onTapCancel: () => setState(() => _down = false),
         onTapUp: (_) => setState(() => _down = false),
-        onTap: widget.onTap,
+        onTap: () {
+          if (!widget.selected) HapticFeedback.selectionClick();
+          widget.onTap();
+        },
         child: Center(
           child: AnimatedScale(
             scale: _down ? 0.88 : 1,

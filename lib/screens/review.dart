@@ -1,4 +1,7 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:starlitfilms/components/motion.dart';
 import 'package:starlitfilms/components/review_card.dart';
 import 'package:starlitfilms/components/user_avatar.dart';
@@ -90,6 +93,7 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
     setState(() => _sending = true);
     try {
       await _service.addComment(_review.id, text);
+      HapticFeedback.lightImpact();
       _commentController.clear();
       if (mounted) FocusScope.of(context).unfocus();
       await _loadComments();
@@ -203,72 +207,119 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
                   padding: EdgeInsets.zero,
                   physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                   children: [
-                    SizedBox(
-                      height: 320,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Hero(
-                            tag: 'review-poster-${_review.id}',
-                            createRectTween: posterFlight,
-                            child: PosterImage(url: _review.movie.posterUrl),
-                          ),
-                          const DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Color(0x55150B2E), Color(0x88150B2E), SC.bg],
-                                stops: [0, 0.55, 1],
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            left: SSpace.page,
-                            right: SSpace.page,
-                            bottom: 12,
-                            child: Entrance(
-                              baseDelay: const Duration(milliseconds: 150),
-                              child: Pressable(
-                                onTap: _review.movie.tmdbId == null ? null : _openMovie,
-                                pressedScale: 0.98,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _review.movie.label,
-                                      style: const TextStyle(
-                                        fontSize: 26,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: -0.5,
-                                        height: 1.15,
-                                        color: SC.text,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        StarRow(rating: _review.rating, size: 22),
-                                        if (_review.movie.tmdbId != null) ...[
-                                          const Spacer(),
-                                          const Text('Ver filme',
-                                              style: TextStyle(
-                                                  color: SC.starSoft,
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 13)),
-                                          const Icon(Icons.chevron_right_rounded,
-                                              color: SC.starSoft, size: 20),
-                                        ],
-                                      ],
-                                    ),
-                                  ],
+                    DoubleTapLike(
+                      onDoubleTap: () {
+                        if (!_review.likedByMe) _toggleLike();
+                      },
+                      child: SizedBox(
+                        height: 330 + MediaQuery.paddingOf(context).top,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // Fundo: o próprio pôster desfocado (sem cortes visíveis).
+                            ClipRect(
+                              child: ImageFiltered(
+                                imageFilter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                                child: Transform.scale(
+                                  scale: 1.2,
+                                  child: PosterImage(url: _review.movie.posterUrl),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                            const DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Color(0x66150B2E), Color(0xAA150B2E), SC.bg],
+                                  stops: [0, 0.6, 1],
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: SSpace.page,
+                              right: SSpace.page,
+                              bottom: 16,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  // Pôster inteiro, em 2:3.
+                                  SizedBox(
+                                    width: 124,
+                                    height: 186,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(SRadius.md),
+                                        boxShadow: SShadow.raised,
+                                      ),
+                                      child: Hero(
+                                        tag: 'review-poster-${_review.id}',
+                                        createRectTween: posterFlight,
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(SRadius.md),
+                                          child: PosterImage(url: _review.movie.posterUrl),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Entrance(
+                                      baseDelay: const Duration(milliseconds: 120),
+                                      child: Pressable(
+                                        onTap: _review.movie.tmdbId == null ? null : _openMovie,
+                                        pressedScale: 0.98,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _review.movie.label,
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 22,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: -0.4,
+                                                height: 1.15,
+                                                color: SC.text,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            StarRow(rating: _review.rating, size: 20),
+                                            if (_review.movie.tmdbId != null) ...[
+                                              const SizedBox(height: 10),
+                                              const Row(
+                                                children: [
+                                                  Text('Ver filme',
+                                                      style: TextStyle(
+                                                          color: SC.starSoft,
+                                                          fontWeight: FontWeight.w600,
+                                                          fontSize: 13)),
+                                                  Icon(Icons.chevron_right_rounded,
+                                                      color: SC.starSoft, size: 20),
+                                                ],
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                    if (!_review.likedByMe)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(SSpace.page, 2, SSpace.page, 0),
+                        child: Text(
+                          'Dica: toque duas vezes no pôster para curtir',
+                          style: TextStyle(color: SC.textFaint, fontSize: 11.5),
+                        ),
+                      ),
                     Entrance(
                       index: 1,
                       child: Padding(

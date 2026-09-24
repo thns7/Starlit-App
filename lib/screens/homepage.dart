@@ -398,7 +398,7 @@ class _FeedTabState extends State<_FeedTab> {
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: SSpace.page),
                 sliver: SliverGrid.builder(
-                  gridDelegate: reviewGridDelegate,
+                  gridDelegate: reviewGridDelegate(MediaQuery.sizeOf(context).width),
                   itemCount: _reviews.length,
                   itemBuilder: (context, i) => Entrance(
                     key: ValueKey(_reviews[i].id),

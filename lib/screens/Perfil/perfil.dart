@@ -212,9 +212,8 @@ class _PerfilState extends State<Perfil> with TickerProviderStateMixin {
                                 child: _pillButton(Icons.ios_share_rounded, 'Compartilhar', () {
                                   Clipboard.setData(ClipboardData(
                                       text: 'Me siga no Starlit: @${auth.username}'));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Seu @ foi copiado')),
-                                  );
+                                  showStarlitToast(context, 'Seu @ foi copiado',
+                                      icon: Icons.content_copy_rounded);
                                 }),
                               ),
                             ],
