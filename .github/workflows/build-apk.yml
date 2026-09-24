@@ -25,6 +25,7 @@ jobs:
 
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
+      - run: flutter test
 
       # Secrets do repositório (Settings → Secrets and variables → Actions):
       # TMDB_TOKEN ativa os filmes do TMDB. SUPABASE_URL / SUPABASE_ANON_KEY,

@@ -14,11 +14,15 @@ import 'package:starlitfilms/services/supabase_service.dart';
 import 'package:starlitfilms/theme/tokens.dart';
 
 /// Detalhe de uma review: curtir, comentar e (se for sua) apagar.
-/// Retorna a review atualizada (ou null se foi apagada) via Navigator.pop.
+/// Mudanças (curtida, comentários) e a exclusão são avisadas por [onChanged];
+/// a navegação de volta fica livre (botão e gesto de deslizar do iPhone).
 class ReviewDetailPage extends StatefulWidget {
   final Review review;
 
-  const ReviewDetailPage({super.key, required this.review});
+  /// Chamado com a review atualizada, ou com null se ela foi apagada.
+  final ValueChanged<Review?>? onChanged;
+
+  const ReviewDetailPage({super.key, required this.review, this.onChanged});
 
   @override
   State<ReviewDetailPage> createState() => _ReviewDetailPageState();
@@ -28,11 +32,16 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
   final _service = SupabaseService.instance;
   final _commentController = TextEditingController();
 
-  late Review _review = widget.review;
+  late Review _review0 = widget.review;
+  Review get _review => _review0;
+  set _review(Review r) {
+    _review0 = r;
+    widget.onChanged?.call(r);
+  }
+
   List<Comment> _comments = [];
   bool _loadingComments = true;
   bool _sending = false;
-  bool _deleted = false;
 
   bool get _isMine => _review.author.id == _service.currentUserId;
 
@@ -136,7 +145,7 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
     if (confirm != true) return;
     try {
       await _service.deleteReview(_review.id);
-      _deleted = true;
+      widget.onChanged?.call(null);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       _showError(e);
@@ -166,269 +175,298 @@ class _ReviewDetailPageState extends State<ReviewDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) Navigator.of(context).pop(_deleted ? null : _review);
-      },
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        backgroundColor: SC.bg,
-        appBar: AppBar(
-          leading: Padding(
-            padding: const EdgeInsets.all(6),
-            child: IconButton.filledTonal(
-              style: IconButton.styleFrom(backgroundColor: SC.bg.withValues(alpha: 0.6)),
-              tooltip: 'Voltar',
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => Navigator.of(context).maybePop(),
-            ),
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      backgroundColor: SC.bg,
+      appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.all(6),
+          child: IconButton.filledTonal(
+            style: IconButton.styleFrom(
+                backgroundColor: SC.bg.withValues(alpha: 0.6)),
+            tooltip: 'Voltar',
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
-          actions: [
-            if (_isMine)
-              Padding(
-                padding: const EdgeInsets.all(6),
-                child: IconButton.filledTonal(
-                  style: IconButton.styleFrom(backgroundColor: SC.bg.withValues(alpha: 0.6)),
-                  tooltip: 'Apagar review',
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  onPressed: _deleteReview,
-                ),
-              ),
-          ],
         ),
-        body: Column(
-          children: [
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _loadComments,
-                color: SC.star,
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                  children: [
-                    DoubleTapLike(
-                      onDoubleTap: () {
-                        if (!_review.likedByMe) _toggleLike();
-                      },
-                      child: SizedBox(
-                        height: 330 + MediaQuery.paddingOf(context).top,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            // Fundo: o próprio pôster desfocado (sem cortes visíveis).
-                            ClipRect(
-                              child: ImageFiltered(
-                                imageFilter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
-                                child: Transform.scale(
-                                  scale: 1.2,
-                                  child: PosterImage(url: _review.movie.posterUrl),
-                                ),
-                              ),
-                            ),
-                            const DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Color(0x66150B2E), Color(0xAA150B2E), SC.bg],
-                                  stops: [0, 0.6, 1],
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: SSpace.page,
-                              right: SSpace.page,
-                              bottom: 16,
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  // Pôster inteiro, em 2:3.
-                                  SizedBox(
-                                    width: 124,
-                                    height: 186,
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(SRadius.md),
-                                        boxShadow: SShadow.raised,
-                                      ),
-                                      child: Hero(
-                                        tag: 'review-poster-${_review.id}',
-                                        createRectTween: posterFlight,
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(SRadius.md),
-                                          child: PosterImage(url: _review.movie.posterUrl),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Entrance(
-                                      baseDelay: const Duration(milliseconds: 120),
-                                      child: Pressable(
-                                        onTap: _review.movie.tmdbId == null ? null : _openMovie,
-                                        pressedScale: 0.98,
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              _review.movie.label,
-                                              maxLines: 3,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 22,
-                                                fontWeight: FontWeight.w700,
-                                                letterSpacing: -0.4,
-                                                height: 1.15,
-                                                color: SC.text,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            StarRow(rating: _review.rating, size: 20),
-                                            if (_review.movie.tmdbId != null) ...[
-                                              const SizedBox(height: 10),
-                                              const Row(
-                                                children: [
-                                                  Text('Ver filme',
-                                                      style: TextStyle(
-                                                          color: SC.starSoft,
-                                                          fontWeight: FontWeight.w600,
-                                                          fontSize: 13)),
-                                                  Icon(Icons.chevron_right_rounded,
-                                                      color: SC.starSoft, size: 20),
-                                                ],
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (!_review.likedByMe)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(SSpace.page, 2, SSpace.page, 0),
-                        child: Text(
-                          'Dica: toque duas vezes no pôster para curtir',
-                          style: TextStyle(color: SC.textFaint, fontSize: 11.5),
-                        ),
-                      ),
-                    Entrance(
-                      index: 1,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(SSpace.page, 8, SSpace.page, 0),
-                        child: Row(
-                          children: [
-                            Pressable(
-                              onTap: () => _openProfile(_review.author.id),
-                              child: UserAvatar.of(_review.author, radius: 20, ring: true),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(_review.author.displayName,
-                                      style: const TextStyle(
-                                          color: SC.text, fontWeight: FontWeight.w600)),
-                                  Text(
-                                    '@${_review.author.username} · ${_formatDate(_review.createdAt)}',
-                                    style: const TextStyle(color: SC.textFaint, fontSize: 12.5),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (!_review.isPublic)
-                              const Tooltip(
-                                message: 'Só para amigos',
-                                child: Icon(Icons.group_rounded, color: SC.textFaint),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Entrance(
-                      index: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(SSpace.page, 16, SSpace.page, 4),
-                        child: Text(
-                          _review.content,
-                          style: const TextStyle(fontSize: 16, color: SC.text, height: 1.6),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: SSpace.page - 8),
-                      child: Row(
+        actions: [
+          if (_isMine)
+            Padding(
+              padding: const EdgeInsets.all(6),
+              child: IconButton.filledTonal(
+                style: IconButton.styleFrom(
+                    backgroundColor: SC.bg.withValues(alpha: 0.6)),
+                tooltip: 'Apagar review',
+                icon: const Icon(Icons.delete_outline_rounded),
+                onPressed: _deleteReview,
+              ),
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _loadComments,
+              color: SC.star,
+              child: ListView(
+                padding: EdgeInsets.zero,
+                physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics()),
+                children: [
+                  DoubleTapLike(
+                    onDoubleTap: () {
+                      if (!_review.likedByMe) _toggleLike();
+                    },
+                    child: SizedBox(
+                      height: 330 + MediaQuery.paddingOf(context).top,
+                      child: Stack(
+                        fit: StackFit.expand,
                         children: [
-                          LikeButton(
-                            liked: _review.likedByMe,
-                            count: _review.likeCount,
-                            onTap: _toggleLike,
+                          // Fundo: o próprio pôster desfocado (sem cortes visíveis).
+                          ClipRect(
+                            child: ImageFiltered(
+                              imageFilter:
+                                  ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                              child: Transform.scale(
+                                scale: 1.2,
+                                child:
+                                    PosterImage(url: _review.movie.posterUrl),
+                              ),
+                            ),
                           ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.chat_bubble_outline_rounded,
-                              color: SC.textMuted, size: 21),
-                          const SizedBox(width: 6),
-                          Text('${_review.commentCount}',
-                              style: const TextStyle(
-                                  color: SC.text, fontWeight: FontWeight.w600)),
+                          const DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Color(0x66150B2E),
+                                  Color(0xAA150B2E),
+                                  SC.bg
+                                ],
+                                stops: [0, 0.6, 1],
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: SSpace.page,
+                            right: SSpace.page,
+                            bottom: 16,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                // Pôster inteiro, em 2:3.
+                                SizedBox(
+                                  width: 124,
+                                  height: 186,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      borderRadius:
+                                          BorderRadius.circular(SRadius.md),
+                                      boxShadow: SShadow.raised,
+                                    ),
+                                    child: Hero(
+                                      tag: 'review-poster-${_review.id}',
+                                      createRectTween: posterFlight,
+                                      child: ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(SRadius.md),
+                                        child: PosterImage(
+                                            url: _review.movie.posterUrl),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Entrance(
+                                    baseDelay:
+                                        const Duration(milliseconds: 120),
+                                    child: Pressable(
+                                      onTap: _review.movie.tmdbId == null
+                                          ? null
+                                          : _openMovie,
+                                      pressedScale: 0.98,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _review.movie.label,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: -0.4,
+                                              height: 1.15,
+                                              color: SC.text,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          StarRow(
+                                              rating: _review.rating, size: 20),
+                                          if (_review.movie.tmdbId != null) ...[
+                                            const SizedBox(height: 10),
+                                            const Row(
+                                              children: [
+                                                Text('Ver filme',
+                                                    style: TextStyle(
+                                                        color: SC.starSoft,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        fontSize: 13)),
+                                                Icon(
+                                                    Icons.chevron_right_rounded,
+                                                    color: SC.starSoft,
+                                                    size: 20),
+                                              ],
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    const Divider(height: 24, indent: SSpace.page, endIndent: SSpace.page),
+                  ),
+                  if (!_review.likedByMe)
                     const Padding(
-                      padding: EdgeInsets.fromLTRB(SSpace.page, 0, SSpace.page, 8),
-                      child: Text('Comentários',
-                          style: TextStyle(
-                              color: SC.text, fontSize: 16, fontWeight: FontWeight.w700)),
+                      padding:
+                          EdgeInsets.fromLTRB(SSpace.page, 2, SSpace.page, 0),
+                      child: Text(
+                        'Dica: toque duas vezes no pôster para curtir',
+                        style: TextStyle(color: SC.textFaint, fontSize: 11.5),
+                      ),
                     ),
-                    if (_loadingComments)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: SSpace.page),
-                        child: Column(children: [
-                          Skeleton(height: 56),
-                          SizedBox(height: 10),
-                          Skeleton(height: 56),
-                        ]),
-                      )
-                    else if (_comments.isEmpty)
-                      const EmptyState(
-                        icon: Icons.forum_rounded,
-                        title: 'Nenhum comentário ainda',
-                        message: 'Comece a conversa sobre esta review.',
-                      )
-                    else
-                      for (var i = 0; i < _comments.length; i++)
-                        Entrance(
-                          key: ValueKey(_comments[i].id),
-                          index: i,
-                          child: _CommentTile(
-                            comment: _comments[i],
-                            isMine: _comments[i].author.id == _service.currentUserId,
-                            onAuthorTap: () => _openProfile(_comments[i].author.id),
-                            onDelete: () => _deleteComment(_comments[i]),
+                  Entrance(
+                    index: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          SSpace.page, 8, SSpace.page, 0),
+                      child: Row(
+                        children: [
+                          Pressable(
+                            onTap: () => _openProfile(_review.author.id),
+                            child: UserAvatar.of(_review.author,
+                                radius: 20, ring: true),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(_review.author.displayName,
+                                    style: const TextStyle(
+                                        color: SC.text,
+                                        fontWeight: FontWeight.w600)),
+                                Text(
+                                  '@${_review.author.username} · ${_formatDate(_review.createdAt)}',
+                                  style: const TextStyle(
+                                      color: SC.textFaint, fontSize: 12.5),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (!_review.isPublic)
+                            const Tooltip(
+                              message: 'Só para amigos',
+                              child: Icon(Icons.group_rounded,
+                                  color: SC.textFaint),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Entrance(
+                    index: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          SSpace.page, 16, SSpace.page, 4),
+                      child: Text(
+                        _review.content,
+                        style: const TextStyle(
+                            fontSize: 16, color: SC.text, height: 1.6),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: SSpace.page - 8),
+                    child: Row(
+                      children: [
+                        LikeButton(
+                          liked: _review.likedByMe,
+                          count: _review.likeCount,
+                          onTap: _toggleLike,
                         ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chat_bubble_outline_rounded,
+                            color: SC.textMuted, size: 21),
+                        const SizedBox(width: 6),
+                        Text('${_review.commentCount}',
+                            style: const TextStyle(
+                                color: SC.text, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  const Divider(
+                      height: 24, indent: SSpace.page, endIndent: SSpace.page),
+                  const Padding(
+                    padding:
+                        EdgeInsets.fromLTRB(SSpace.page, 0, SSpace.page, 8),
+                    child: Text('Comentários',
+                        style: TextStyle(
+                            color: SC.text,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                  if (_loadingComments)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: SSpace.page),
+                      child: Column(children: [
+                        Skeleton(height: 56),
+                        SizedBox(height: 10),
+                        Skeleton(height: 56),
+                      ]),
+                    )
+                  else if (_comments.isEmpty)
+                    const EmptyState(
+                      icon: Icons.forum_rounded,
+                      title: 'Nenhum comentário ainda',
+                      message: 'Comece a conversa sobre esta review.',
+                    )
+                  else
+                    for (var i = 0; i < _comments.length; i++)
+                      Entrance(
+                        key: ValueKey(_comments[i].id),
+                        index: i,
+                        child: _CommentTile(
+                          comment: _comments[i],
+                          isMine:
+                              _comments[i].author.id == _service.currentUserId,
+                          onAuthorTap: () =>
+                              _openProfile(_comments[i].author.id),
+                          onDelete: () => _deleteComment(_comments[i]),
+                        ),
+                      ),
+                  const SizedBox(height: 16),
+                ],
               ),
             ),
-            _Composer(
-              controller: _commentController,
-              sending: _sending,
-              onSend: _sendComment,
-            ),
-          ],
-        ),
+          ),
+          _Composer(
+            controller: _commentController,
+            sending: _sending,
+            onSend: _sendComment,
+          ),
+        ],
       ),
     );
   }
@@ -454,7 +492,9 @@ class _CommentTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Pressable(onTap: onAuthorTap, child: UserAvatar.of(comment.author, radius: 17)),
+          Pressable(
+              onTap: onAuthorTap,
+              child: UserAvatar.of(comment.author, radius: 17)),
           const SizedBox(width: 10),
           Expanded(
             child: Container(
@@ -473,10 +513,13 @@ class _CommentTile extends StatelessWidget {
                 children: [
                   Text('@${comment.author.username}',
                       style: const TextStyle(
-                          color: SC.starSoft, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                          color: SC.starSoft,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(comment.content,
-                      style: const TextStyle(color: SC.text, fontSize: 14.5, height: 1.45)),
+                      style: const TextStyle(
+                          color: SC.text, fontSize: 14.5, height: 1.45)),
                 ],
               ),
             ),
@@ -485,7 +528,8 @@ class _CommentTile extends StatelessWidget {
             IconButton(
               tooltip: 'Apagar comentário',
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.close_rounded, color: SC.textFaint, size: 18),
+              icon: const Icon(Icons.close_rounded,
+                  color: SC.textFaint, size: 18),
               onPressed: onDelete,
             ),
         ],
@@ -500,7 +544,8 @@ class _Composer extends StatefulWidget {
   final bool sending;
   final VoidCallback onSend;
 
-  const _Composer({required this.controller, required this.sending, required this.onSend});
+  const _Composer(
+      {required this.controller, required this.sending, required this.onSend});
 
   @override
   State<_Composer> createState() => _ComposerState();
@@ -527,7 +572,8 @@ class _ComposerState extends State<_Composer> {
     return Container(
       decoration: BoxDecoration(
         color: SC.surface,
-        border: Border(top: BorderSide(color: SC.outline.withValues(alpha: 0.4))),
+        border:
+            Border(top: BorderSide(color: SC.outline.withValues(alpha: 0.4))),
       ),
       child: SafeArea(
         top: false,
@@ -551,7 +597,8 @@ class _ComposerState extends State<_Composer> {
                       borderRadius: BorderRadius.circular(SRadius.lg)),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(SRadius.lg),
-                    borderSide: BorderSide(color: SC.outline.withValues(alpha: 0.35)),
+                    borderSide:
+                        BorderSide(color: SC.outline.withValues(alpha: 0.35)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(SRadius.lg),
@@ -579,9 +626,11 @@ class _ComposerState extends State<_Composer> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
-                      : const Icon(Icons.arrow_upward_rounded, color: Colors.white),
+                      : const Icon(Icons.arrow_upward_rounded,
+                          color: Colors.white),
                 ),
               ),
             ),

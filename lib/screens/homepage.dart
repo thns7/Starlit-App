@@ -199,19 +199,29 @@ class _FeedTabState extends State<_FeedTab> {
     ).then((_) => _loadFeed());
   }
 
-  Future<void> _openReview(int index) async {
-    final updated = await Navigator.push<Review?>(
+  void _openReview(int index) {
+    final id = _reviews[index].id;
+    Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ReviewDetailPage(review: _reviews[index])),
+      MaterialPageRoute(
+        builder: (_) => ReviewDetailPage(
+          review: _reviews[index],
+          // Mantém o card da home em dia (curtidas, comentários, exclusão).
+          onChanged: (updated) {
+            if (!mounted) return;
+            setState(() {
+              final i = _reviews.indexWhere((r) => r.id == id);
+              if (i < 0) return;
+              if (updated == null) {
+                _reviews.removeAt(i);
+              } else {
+                _reviews[i] = updated;
+              }
+            });
+          },
+        ),
+      ),
     );
-    if (!mounted) return;
-    setState(() {
-      if (updated == null) {
-        _reviews.removeAt(index);
-      } else {
-        _reviews[index] = updated;
-      }
-    });
   }
 
   Future<void> _newReview() async {
