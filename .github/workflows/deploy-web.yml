@@ -19,6 +19,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # O token do TMDB está salvo como secret do ambiente "TMDB_TOKEN".
+    environment: TMDB_TOKEN
     steps:
       - uses: actions/checkout@v4
 
